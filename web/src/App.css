@@ -150,21 +150,103 @@
 
 .input-group {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.4rem;
   margin: 1rem 0;
 }
 
 .input-group label {
   font-weight: 500;
+  font-size: 0.9rem;
 }
 
-.input-group input {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 1rem;
-  width: 150px;
+/* StepInput */
+
+.step-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.step-slider {
+  width: 100%;
+  cursor: pointer;
+  accent-color: #4a90d9;
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.step-btn {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f0f0f0;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: 40px;
+  text-align: center;
+  line-height: 1;
+}
+
+.step-btn:hover:not(:disabled) {
+  background: #ddd;
+}
+
+.step-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.step-number-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.step-number-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.step-presets {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  padding: 0.2rem 0.65rem;
+  border: 1px solid #bbb;
+  border-radius: 12px;
+  background: #f5f5f5;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.preset-btn:hover:not(:disabled) {
+  background: #e0e0e0;
+  border-color: #999;
+}
+
+.preset-btn.preset-active {
+  background: #4a90d9;
+  color: white;
+  border-color: #4a90d9;
+}
+
+.preset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .response-box {
@@ -379,5 +461,38 @@
     background: #333;
     border-color: #555;
     color: #999;
+  }
+
+  .step-btn {
+    background: #444;
+    border-color: #666;
+    color: #eee;
+  }
+
+  .step-btn:hover:not(:disabled) {
+    background: #555;
+  }
+
+  .step-number-input {
+    background: #333;
+    border-color: #555;
+    color: #fff;
+  }
+
+  .preset-btn {
+    background: #444;
+    border-color: #666;
+    color: #eee;
+  }
+
+  .preset-btn:hover:not(:disabled) {
+    background: #555;
+    border-color: #888;
+  }
+
+  .preset-btn.preset-active {
+    background: #4a90d9;
+    color: white;
+    border-color: #4a90d9;
   }
 }

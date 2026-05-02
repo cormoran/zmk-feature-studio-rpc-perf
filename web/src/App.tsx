@@ -28,6 +28,105 @@ import {
 
 export const SUBSYSTEM_IDENTIFIER = "zmk__perf";
 
+function StepInput({
+  id,
+  value,
+  min,
+  max,
+  smallStep,
+  largeStep,
+  presets,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  value: number;
+  min: number;
+  max: number;
+  smallStep: number;
+  largeStep: number;
+  presets: number[];
+  disabled: boolean;
+  onChange: (v: number) => void;
+}) {
+  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  const adj = (delta: number) => () => onChange(clamp(value + delta));
+
+  return (
+    <div className="step-input">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(clamp(parseInt(e.target.value, 10)))}
+        className="step-slider"
+      />
+      <div className="step-row">
+        <button
+          type="button"
+          className="step-btn"
+          onClick={adj(-largeStep)}
+          disabled={disabled}
+        >
+          −{largeStep}
+        </button>
+        <button
+          type="button"
+          className="step-btn"
+          onClick={adj(-smallStep)}
+          disabled={disabled}
+        >
+          −{smallStep}
+        </button>
+        <input
+          id={id}
+          type="number"
+          min={min}
+          max={max}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = parseInt(e.target.value, 10);
+            if (!isNaN(v)) onChange(clamp(v));
+          }}
+          className="step-number-input"
+        />
+        <button
+          type="button"
+          className="step-btn"
+          onClick={adj(smallStep)}
+          disabled={disabled}
+        >
+          +{smallStep}
+        </button>
+        <button
+          type="button"
+          className="step-btn"
+          onClick={adj(largeStep)}
+          disabled={disabled}
+        >
+          +{largeStep}
+        </button>
+      </div>
+      <div className="step-presets">
+        {presets.map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={`preset-btn${value === p ? " preset-active" : ""}`}
+            disabled={disabled}
+            onClick={() => onChange(p)}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const THROUGHPUT_WINDOW_MS = 3000;
 const LATENCY_HISTORY_MS = 60_000;
 
@@ -396,50 +495,46 @@ export function PerfSection() {
       <div className="perf-controls">
         <div className="input-group">
           <label htmlFor="req-size">Request size (bytes):</label>
-          <input
+          <StepInput
             id="req-size"
-            type="number"
+            value={requestSize}
             min={0}
             max={256}
-            value={requestSize}
+            smallStep={1}
+            largeStep={32}
+            presets={[0, 32, 64, 128, 256]}
             disabled={isRunning}
-            onChange={(e) =>
-              setRequestSize(
-                Math.min(256, Math.max(0, parseInt(e.target.value) || 0))
-              )
-            }
+            onChange={setRequestSize}
           />
         </div>
 
         <div className="input-group">
           <label htmlFor="resp-size">Response size (bytes):</label>
-          <input
+          <StepInput
             id="resp-size"
-            type="number"
+            value={responseSize}
             min={0}
             max={256}
-            value={responseSize}
+            smallStep={1}
+            largeStep={32}
+            presets={[0, 32, 64, 128, 256]}
             disabled={isRunning}
-            onChange={(e) =>
-              setResponseSize(
-                Math.min(256, Math.max(0, parseInt(e.target.value) || 0))
-              )
-            }
+            onChange={setResponseSize}
           />
         </div>
 
         <div className="input-group">
           <label htmlFor="interval">Interval between requests (ms):</label>
-          <input
+          <StepInput
             id="interval"
-            type="number"
-            min={1}
-            max={10000}
             value={intervalMs}
+            min={0}
+            max={10000}
+            smallStep={10}
+            largeStep={100}
+            presets={[0, 100, 500, 1000, 2000]}
             disabled={isRunning}
-            onChange={(e) =>
-              setIntervalMs(Math.max(1, parseInt(e.target.value) || 500))
-            }
+            onChange={setIntervalMs}
           />
         </div>
       </div>
