@@ -112,13 +112,12 @@ export function PerfSection() {
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState<PerfStats>(INITIAL_STATS);
 
-  // Mutable refs to avoid stale-closure issues inside interval callback
+  // Mutable refs to avoid stale-closure issues inside the loop
   const seqRef = useRef(0);
-  const pendingRef = useRef<Map<number, number>>(new Map()); // seq → sentAt
   const statsRef = useRef({ ...INITIAL_STATS });
   // Each entry records {timestamp, bytes} for throughput windowing
   const bytesWindowRef = useRef<Array<{ ts: number; bytes: number }>>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isRunningRef = useRef(false);
   const serviceRef = useRef<ZMKCustomSubsystem | null>(null);
 
   const updateStats = useCallback(() => {
@@ -126,10 +125,7 @@ export function PerfSection() {
   }, []);
 
   const stop = useCallback(() => {
-    if (timerRef.current !== null) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    isRunningRef.current = false;
     setIsRunning(false);
   }, []);
 
@@ -139,87 +135,95 @@ export function PerfSection() {
 
     // Reset state
     seqRef.current = 0;
-    pendingRef.current.clear();
     bytesWindowRef.current = [];
     statsRef.current = { ...INITIAL_STATS };
     setStats({ ...INITIAL_STATS });
+    isRunningRef.current = true;
     setIsRunning(true);
 
-    timerRef.current = setInterval(async () => {
-      const seq = ++seqRef.current;
-      const sentAt = performance.now();
+    const runLoop = async () => {
+      while (isRunningRef.current) {
+        const seq = ++seqRef.current;
+        const sentAt = performance.now();
 
-      // Build request payload
-      const data = new Uint8Array(requestSize).fill(0x55);
-      const payload = Request.encode(
-        Request.create({ perf: { sequenceNumber: seq, responseSize, data } })
-      ).finish();
+        // Build request payload
+        const data = new Uint8Array(requestSize).fill(0x55);
+        const payload = Request.encode(
+          Request.create({ perf: { sequenceNumber: seq, responseSize, data } })
+        ).finish();
 
-      statsRef.current.sent += 1;
-      pendingRef.current.set(seq, sentAt);
+        statsRef.current.sent += 1;
 
-      try {
-        const raw = await service.callRPC(payload);
-        if (!raw) return;
+        try {
+          // Await response before sending the next request so we never queue
+          // requests behind the firmware mutex, keeping latency measurement clean.
+          const raw = await service.callRPC(payload);
+          if (raw) {
+            const resp = Response.decode(raw);
+            if (resp.perf) {
+              const now = performance.now();
+              const latency = now - sentAt;
+              statsRef.current.received += 1;
 
-        const resp = Response.decode(raw);
-        if (!resp.perf) return;
+              // Latency
+              statsRef.current.latencyMs = latency;
+              statsRef.current.minLatencyMs =
+                statsRef.current.minLatencyMs === null
+                  ? latency
+                  : Math.min(statsRef.current.minLatencyMs, latency);
+              statsRef.current.maxLatencyMs =
+                statsRef.current.maxLatencyMs === null
+                  ? latency
+                  : Math.max(statsRef.current.maxLatencyMs, latency);
 
-        const now = performance.now();
-        const startTs = pendingRef.current.get(resp.perf.sequenceNumber);
-        if (startTs === undefined) return;
+              // Throughput: count request + response bytes in a sliding window
+              const transferredBytes = payload.length + raw.length;
+              bytesWindowRef.current.push({ ts: now, bytes: transferredBytes });
+              // Prune entries older than the window
+              const cutoff = now - THROUGHPUT_WINDOW_MS;
+              bytesWindowRef.current = bytesWindowRef.current.filter(
+                (e) => e.ts >= cutoff
+              );
+              const windowBytes = bytesWindowRef.current.reduce(
+                (acc, e) => acc + e.bytes,
+                0
+              );
+              const windowDuration =
+                bytesWindowRef.current.length > 1
+                  ? (bytesWindowRef.current[
+                      bytesWindowRef.current.length - 1
+                    ].ts -
+                      bytesWindowRef.current[0].ts) /
+                    1000
+                  : 0; // not enough data points yet
+              statsRef.current.bitsPerSecond =
+                windowDuration > 0 ? (windowBytes * 8) / windowDuration : 0;
 
-        pendingRef.current.delete(resp.perf.sequenceNumber);
+              // Loss rate
+              statsRef.current.lossRate =
+                statsRef.current.sent > 0
+                  ? ((statsRef.current.sent - statsRef.current.received) /
+                      statsRef.current.sent) *
+                    100
+                  : 0;
+            }
+          }
+        } catch {
+          // Errors (e.g. timeout, disconnected) are intentionally ignored here;
+          // the sent/received counter mismatch already reflects the loss rate.
+        }
 
-        const latency = now - startTs;
-        statsRef.current.received += 1;
+        updateStats();
 
-        // Latency
-        statsRef.current.latencyMs = latency;
-        statsRef.current.minLatencyMs =
-          statsRef.current.minLatencyMs === null
-            ? latency
-            : Math.min(statsRef.current.minLatencyMs, latency);
-        statsRef.current.maxLatencyMs =
-          statsRef.current.maxLatencyMs === null
-            ? latency
-            : Math.max(statsRef.current.maxLatencyMs, latency);
-
-        // Throughput: count request + response bytes in a sliding window
-        const transferredBytes = payload.length + raw.length;
-        bytesWindowRef.current.push({ ts: now, bytes: transferredBytes });
-        // Prune entries older than the window
-        const cutoff = now - THROUGHPUT_WINDOW_MS;
-        bytesWindowRef.current = bytesWindowRef.current.filter(
-          (e) => e.ts >= cutoff
-        );
-        const windowBytes = bytesWindowRef.current.reduce(
-          (acc, e) => acc + e.bytes,
-          0
-        );
-        const windowDuration =
-          bytesWindowRef.current.length > 1
-            ? (bytesWindowRef.current[bytesWindowRef.current.length - 1].ts -
-                bytesWindowRef.current[0].ts) /
-              1000
-            : 0; // not enough data points yet
-        statsRef.current.bitsPerSecond =
-          windowDuration > 0 ? (windowBytes * 8) / windowDuration : 0;
-
-        // Loss rate
-        statsRef.current.lossRate =
-          statsRef.current.sent > 0
-            ? ((statsRef.current.sent - statsRef.current.received) /
-                statsRef.current.sent) *
-              100
-            : 0;
-      } catch {
-        // Errors (e.g. timeout, disconnected) are intentionally ignored here;
-        // the sent/received counter mismatch already reflects the loss rate.
+        const elapsed = performance.now() - sentAt;
+        const remaining = intervalMs - elapsed;
+        if (isRunningRef.current && remaining > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+        }
       }
+    };
 
-      updateStats();
-    }, intervalMs);
+    runLoop();
   }, [zmkApp, requestSize, responseSize, intervalMs, updateStats]);
 
   // Keep serviceRef in sync when the connection changes
@@ -298,7 +302,7 @@ export function PerfSection() {
         </div>
 
         <div className="input-group">
-          <label htmlFor="interval">Send interval (ms):</label>
+          <label htmlFor="interval">Interval between requests (ms):</label>
           <input
             id="interval"
             type="number"
