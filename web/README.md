@@ -1,15 +1,12 @@
-# ZMK Module Template - Web Frontend
+# zmk-feature-studio-rpc-perf - Web Frontend
 
-This is a minimal web application template for interacting with ZMK firmware
-modules that implement custom Studio RPC subsystems.
+Web UI for measuring the performance of the ZMK Studio custom RPC protocol.
 
 ## Features
 
-- **Device Connection**: Connect to ZMK devices via Bluetooth (GATT) or Serial
-- **Custom RPC**: Communicate with your custom firmware module using protobuf
-- **React + TypeScript**: Modern web development with Vite for fast builds
-- **react-zmk-studio**: Uses the `@cormoran/zmk-studio-react-hook` library for
-  simplified ZMK integration
+- **Device Connection**: Connect to ZMK devices via USB (serial) or Bluetooth (GATT)
+- **Performance Controls**: Adjust request size, response size, and send interval
+- **Live Stats**: Displays ping latency, throughput (bps), and packet-loss rate
 
 ## Quick Start
 
@@ -35,35 +32,33 @@ npm test
 ```
 src/
 ├── main.tsx              # React entry point
-├── App.tsx               # Main application with connection UI
+├── App.tsx               # Main application with connection and perf UI
 ├── App.css               # Styles
 └── proto/                # Generated protobuf TypeScript types
-    └── zmk/template/
-        └── custom.ts
+    └── zmk/perf/
+        └── perf.ts
 
 test/
 ├── App.spec.tsx              # Tests for App component
-└── RPCTestSection.spec.tsx   # Tests for RPC functionality
+└── RPCTestSection.spec.tsx   # Tests for PerfSection component
 ```
 
 ## How It Works
 
 ### 1. Protocol Definition
 
-The protobuf schema is defined in `../proto/zmk/template/custom.proto`:
+The protobuf schema is defined in `../proto/zmk/perf/perf.proto`:
 
 ```proto
-message Request {
-    oneof request_type {
-        SampleRequest sample = 1;
-    }
+message PerfRequest {
+    uint32 sequence_number = 1;
+    uint32 response_size = 2;
+    bytes data = 3;
 }
 
-message Response {
-    oneof response_type {
-        ErrorResponse error = 1;
-        SampleResponse sample = 2;
-    }
+message PerfResponse {
+    uint32 sequence_number = 1;
+    bytes data = 2;
 }
 ```
 
@@ -82,13 +77,10 @@ This runs `buf generate` which uses the configuration in `buf.gen.yaml`.
 The app uses the `@cormoran/zmk-studio-react-hook` library:
 
 ```typescript
-import { useZMKApp, ZMKCustomSubsystem } from "@cormoran/zmk-studio-react-hook";
+import { ZMKCustomSubsystem } from "@cormoran/zmk-studio-react-hook";
 
-// Connect to device
-const { state, connect, findSubsystem, isConnected } = useZMKApp();
-
-// Find your subsystem
-const subsystem = findSubsystem("zmk__template");
+// Find the perf subsystem
+const subsystem = zmkApp.findSubsystem("zmk__perf");
 
 // Create service and make RPC calls
 const service = new ZMKCustomSubsystem(state.connection, subsystem.index);
@@ -96,8 +88,6 @@ const response = await service.callRPC(payload);
 ```
 
 ## Testing
-
-This template includes Jest tests as a reference implementation for template users.
 
 ### Running Tests
 
@@ -114,50 +104,8 @@ npm run test:coverage
 
 ### Test Structure
 
-The tests demonstrate how to use the `react-zmk-studio` test helpers:
-
-- **App.spec.tsx**: Basic rendering tests for the main application
-- **RPCTestSection.spec.tsx**: Tests showing how to mock ZMK connection and test
-  components that interact with devices
-
-### Writing Tests
-
-Use the test helpers from `@cormoran/zmk-studio-react-hook/testing`:
-
-```typescript
-import {
-  createConnectedMockZMKApp,
-  ZMKAppProvider,
-} from "@cormoran/zmk-studio-react-hook/testing";
-
-// Create a mock connected device with subsystems
-const mockZMKApp = createConnectedMockZMKApp({
-  deviceName: "Test Device",
-  subsystems: ["zmk__template"],
-});
-
-// Wrap your component with the provider
-render(
-  <ZMKAppProvider value={mockZMKApp}>
-    <YourComponent />
-  </ZMKAppProvider>
-);
-```
-
-See the test files in `./test/` for complete examples.
-
-## Customization
-
-To adapt this template for your own ZMK module:
-
-1. **Update the proto file**: Modify `../proto/zmk/template/custom.proto` with
-   your message types
-2. **Regenerate types**: Run `npm run generate`
-3. **Update subsystem identifier**: Change `SUBSYSTEM_IDENTIFIER` in `App.tsx`
-   to match your firmware registration
-4. **Update RPC logic**: Modify the request/response handling in `App.tsx`
-5. **Update tests**: Modify tests to match your custom subsystem identifier and
-   functionality
+- **App.spec.tsx**: Basic rendering and connection flow tests
+- **RPCTestSection.spec.tsx**: Tests for the PerfSection component
 
 ## Dependencies
 
@@ -168,24 +116,3 @@ To adapt this template for your own ZMK module:
 - **ts-proto**: Protocol buffers code generator for TypeScript
 - **React 19**: Modern React with hooks
 - **Vite**: Fast build tool and dev server
-
-### Development Dependencies
-
-- **Jest**: Testing framework
-- **@testing-library/react**: React testing utilities
-- **ts-jest**: TypeScript support for Jest
-- **identity-obj-proxy**: CSS mock for testing
-
-## Development Notes
-
-- The `react-zmk-studio` directory contains a copy of the library for
-  reference - it's automatically built and linked via `package.json`
-- Proto generation uses `buf` and `ts-proto` for clean TypeScript types
-- Connection state is managed by the `useZMKApp` hook from react-zmk-studio
-- RPC calls are made through `ZMKCustomSubsystem` service class
-
-## See Also
-
-- [design.md](./design.md) - Detailed frontend architecture documentation
-- [react-zmk-studio/README.md](./react-zmk-studio/README.md) - react-zmk-studio
-  library documentation

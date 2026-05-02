@@ -106,7 +106,7 @@ function App() {
 export function PerfSection() {
   const zmkApp = useContext(ZMKAppContext);
 
-  const [requestSize, setRequestSize] = useState(10);
+  const [requestSize, setRequestSize] = useState(64);
   const [responseSize, setResponseSize] = useState(64);
   const [intervalMs, setIntervalMs] = useState(500);
   const [isRunning, setIsRunning] = useState(false);
@@ -250,8 +250,8 @@ export function PerfSection() {
           <p>
             ⚠️ Subsystem "{SUBSYSTEM_IDENTIFIER}" not found. Make sure your
             firmware includes the perf module (
-            <code>CONFIG_ZMK_TEMPLATE_FEATURE=y</code> and{" "}
-            <code>CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y</code>).
+            <code>CONFIG_ZMK_STUDIO_RPC_PERF=y</code> and{" "}
+            <code>CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y</code>).
           </p>
         </div>
       </section>
