@@ -15,11 +15,26 @@ import {
   ZMKAppContext,
 } from "@cormoran/zmk-studio-react-hook";
 import { Request, Response } from "./proto/zmk/perf/perf";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 
 export const SUBSYSTEM_IDENTIFIER = "zmk__perf";
 
-// Sliding-window duration for throughput calculation (ms)
 const THROUGHPUT_WINDOW_MS = 3000;
+const LATENCY_HISTORY_MS = 60_000;
+
+interface LatencyPoint {
+  elapsedS: number;
+  latencyMs: number;
+}
 
 interface PerfStats {
   sent: number;
@@ -27,8 +42,11 @@ interface PerfStats {
   latencyMs: number | null;
   minLatencyMs: number | null;
   maxLatencyMs: number | null;
+  avgLatencyMs: number | null;
+  medianLatencyMs: number | null;
   bitsPerSecond: number;
-  lossRate: number; // 0-100 %
+  rps: number;
+  lossRate: number;
 }
 
 const INITIAL_STATS: PerfStats = {
@@ -37,7 +55,10 @@ const INITIAL_STATS: PerfStats = {
   latencyMs: null,
   minLatencyMs: null,
   maxLatencyMs: null,
+  avgLatencyMs: null,
+  medianLatencyMs: null,
   bitsPerSecond: 0,
+  rps: 0,
   lossRate: 0,
 };
 
@@ -103,6 +124,84 @@ function App() {
   );
 }
 
+function LatencyGraph({
+  history,
+  avgLatencyMs,
+  medianLatencyMs,
+}: {
+  history: LatencyPoint[];
+  avgLatencyMs: number | null;
+  medianLatencyMs: number | null;
+}) {
+  if (history.length === 0) {
+    return (
+      <div className="graph-empty">
+        No data yet — start the test to see latency over time.
+      </div>
+    );
+  }
+
+  const latest = history[history.length - 1].elapsedS;
+  const xMin = Math.max(0, latest - 60);
+
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart
+        data={history}
+        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
+        <XAxis
+          dataKey="elapsedS"
+          type="number"
+          domain={[xMin, latest]}
+          tickFormatter={(v: number) => `${v.toFixed(0)}s`}
+          tick={{ fontSize: 11 }}
+        />
+        <YAxis unit="ms" width={65} tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
+        <Tooltip
+          formatter={(val: number) => [`${val.toFixed(1)} ms`, "Latency"]}
+          labelFormatter={(v) => `${Number(v).toFixed(1)}s`}
+        />
+        <Line
+          type="monotone"
+          dataKey="latencyMs"
+          stroke="#4a90d9"
+          dot={false}
+          strokeWidth={1.5}
+          isAnimationActive={false}
+        />
+        {avgLatencyMs !== null && (
+          <ReferenceLine
+            y={avgLatencyMs}
+            stroke="#f97316"
+            strokeDasharray="4 2"
+            label={{
+              value: `avg ${avgLatencyMs.toFixed(1)}ms`,
+              fill: "#f97316",
+              fontSize: 11,
+              position: "insideTopRight",
+            }}
+          />
+        )}
+        {medianLatencyMs !== null && (
+          <ReferenceLine
+            y={medianLatencyMs}
+            stroke="#22c55e"
+            strokeDasharray="4 2"
+            label={{
+              value: `med ${medianLatencyMs.toFixed(1)}ms`,
+              fill: "#22c55e",
+              fontSize: 11,
+              position: "insideBottomRight",
+            }}
+          />
+        )}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function PerfSection() {
   const zmkApp = useContext(ZMKAppContext);
 
@@ -111,17 +210,19 @@ export function PerfSection() {
   const [intervalMs, setIntervalMs] = useState(500);
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState<PerfStats>(INITIAL_STATS);
+  const [latencyHistory, setLatencyHistory] = useState<LatencyPoint[]>([]);
 
-  // Mutable refs to avoid stale-closure issues inside the loop
   const seqRef = useRef(0);
   const statsRef = useRef({ ...INITIAL_STATS });
-  // Each entry records {timestamp, bytes} for throughput windowing
   const bytesWindowRef = useRef<Array<{ ts: number; bytes: number }>>([]);
+  const latencyHistoryRef = useRef<LatencyPoint[]>([]);
+  const testStartRef = useRef(0);
   const isRunningRef = useRef(false);
   const serviceRef = useRef<ZMKCustomSubsystem | null>(null);
 
   const updateStats = useCallback(() => {
     setStats({ ...statsRef.current });
+    setLatencyHistory([...latencyHistoryRef.current]);
   }, []);
 
   const stop = useCallback(() => {
@@ -133,11 +234,13 @@ export function PerfSection() {
     if (!zmkApp || !serviceRef.current) return;
     const service = serviceRef.current;
 
-    // Reset state
     seqRef.current = 0;
     bytesWindowRef.current = [];
+    latencyHistoryRef.current = [];
     statsRef.current = { ...INITIAL_STATS };
     setStats({ ...INITIAL_STATS });
+    setLatencyHistory([]);
+    testStartRef.current = performance.now();
     isRunningRef.current = true;
     setIsRunning(true);
 
@@ -146,7 +249,6 @@ export function PerfSection() {
         const seq = ++seqRef.current;
         const sentAt = performance.now();
 
-        // Build request payload
         const data = new Uint8Array(requestSize).fill(0x55);
         const payload = Request.encode(
           Request.create({ perf: { sequenceNumber: seq, responseSize, data } })
@@ -155,8 +257,7 @@ export function PerfSection() {
         statsRef.current.sent += 1;
 
         try {
-          // Await response before sending the next request so we never queue
-          // requests behind the firmware mutex, keeping latency measurement clean.
+          // Await response before sending next request — avoids firmware mutex contention.
           const raw = await service.callRPC(payload);
           if (raw) {
             const resp = Response.decode(raw);
@@ -165,7 +266,6 @@ export function PerfSection() {
               const latency = now - sentAt;
               statsRef.current.received += 1;
 
-              // Latency
               statsRef.current.latencyMs = latency;
               statsRef.current.minLatencyMs =
                 statsRef.current.minLatencyMs === null
@@ -176,10 +276,39 @@ export function PerfSection() {
                   ? latency
                   : Math.max(statsRef.current.maxLatencyMs, latency);
 
-              // Throughput: count request + response bytes in a sliding window
+              // Latency history (1 min sliding window)
+              const elapsedS = (now - testStartRef.current) / 1000;
+              latencyHistoryRef.current.push({ elapsedS, latencyMs: latency });
+              const historyCutoffS = elapsedS - LATENCY_HISTORY_MS / 1000;
+              latencyHistoryRef.current = latencyHistoryRef.current.filter(
+                (e) => e.elapsedS >= historyCutoffS
+              );
+
+              // Avg and median from history window
+              const windowLatencies = latencyHistoryRef.current.map(
+                (e) => e.latencyMs
+              );
+              const sum = windowLatencies.reduce((a, b) => a + b, 0);
+              statsRef.current.avgLatencyMs = sum / windowLatencies.length;
+              const sorted = [...windowLatencies].sort((a, b) => a - b);
+              const mid = Math.floor(sorted.length / 2);
+              statsRef.current.medianLatencyMs =
+                sorted.length % 2 === 0
+                  ? (sorted[mid - 1] + sorted[mid]) / 2
+                  : sorted[mid];
+
+              // RPS from history window
+              const hist = latencyHistoryRef.current;
+              const histDuration =
+                hist.length > 1
+                  ? hist[hist.length - 1].elapsedS - hist[0].elapsedS
+                  : 0;
+              statsRef.current.rps =
+                histDuration > 0 ? (hist.length - 1) / histDuration : 0;
+
+              // Throughput: 3s sliding window
               const transferredBytes = payload.length + raw.length;
               bytesWindowRef.current.push({ ts: now, bytes: transferredBytes });
-              // Prune entries older than the window
               const cutoff = now - THROUGHPUT_WINDOW_MS;
               bytesWindowRef.current = bytesWindowRef.current.filter(
                 (e) => e.ts >= cutoff
@@ -195,11 +324,10 @@ export function PerfSection() {
                     ].ts -
                       bytesWindowRef.current[0].ts) /
                     1000
-                  : 0; // not enough data points yet
+                  : 0;
               statsRef.current.bitsPerSecond =
                 windowDuration > 0 ? (windowBytes * 8) / windowDuration : 0;
 
-              // Loss rate
               statsRef.current.lossRate =
                 statsRef.current.sent > 0
                   ? ((statsRef.current.sent - statsRef.current.received) /
@@ -209,8 +337,7 @@ export function PerfSection() {
             }
           }
         } catch {
-          // Errors (e.g. timeout, disconnected) are intentionally ignored here;
-          // the sent/received counter mismatch already reflects the loss rate.
+          // sent/received counter mismatch already reflects loss rate
         }
 
         updateStats();
@@ -333,16 +460,27 @@ export function PerfSection() {
           onClick={() => {
             statsRef.current = { ...INITIAL_STATS };
             bytesWindowRef.current = [];
+            latencyHistoryRef.current = [];
             setStats({ ...INITIAL_STATS });
+            setLatencyHistory([]);
           }}
         >
           🔄 Reset
         </button>
       </div>
 
+      <div className="graph-section">
+        <h3>Latency over time (last 60s)</h3>
+        <LatencyGraph
+          history={latencyHistory}
+          avgLatencyMs={stats.avgLatencyMs}
+          medianLatencyMs={stats.medianLatencyMs}
+        />
+      </div>
+
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-label">Ping latency</div>
+          <div className="stat-label">Last latency</div>
           <div className="stat-value">
             {stats.latencyMs !== null
               ? `${stats.latencyMs.toFixed(1)} ms`
@@ -356,13 +494,35 @@ export function PerfSection() {
         </div>
 
         <div className="stat-card">
+          <div className="stat-label">Avg latency (60s)</div>
+          <div className="stat-value">
+            {stats.avgLatencyMs !== null
+              ? `${stats.avgLatencyMs.toFixed(1)} ms`
+              : "—"}
+          </div>
+          <div className="stat-sub">
+            {stats.medianLatencyMs !== null
+              ? `median ${stats.medianLatencyMs.toFixed(1)} ms`
+              : ""}
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-label">Req/sec (60s)</div>
+          <div className="stat-value">
+            {stats.rps > 0 ? stats.rps.toFixed(2) : "—"}
+          </div>
+          <div className="stat-sub">requests per second</div>
+        </div>
+
+        <div className="stat-card">
           <div className="stat-label">Throughput</div>
           <div className="stat-value">
             {stats.bitsPerSecond >= 1000
               ? `${(stats.bitsPerSecond / 1000).toFixed(1)} kbps`
               : `${stats.bitsPerSecond.toFixed(0)} bps`}
           </div>
-          <div className="stat-sub">bits per second (request + response)</div>
+          <div className="stat-sub">bits per second (3s window)</div>
         </div>
 
         <div className="stat-card">
