@@ -26,8 +26,12 @@ describe("PerfSection Component", () => {
       expect(screen.getByText(/Performance Test/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Request size/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/Response size/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Send interval/i)).toBeInTheDocument();
-      expect(screen.getByText(/Start/i)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/Interval between requests/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Start/i })
+      ).toBeInTheDocument();
     });
 
     it("should show default input values", () => {
@@ -48,11 +52,11 @@ describe("PerfSection Component", () => {
         /Response size/i
       ) as HTMLInputElement;
       const intInput = screen.getByLabelText(
-        /Send interval/i
+        /Interval between requests/i
       ) as HTMLInputElement;
-      expect(reqInput.value).toBe("64");
-      expect(respInput.value).toBe("64");
-      expect(intInput.value).toBe("500");
+      expect(reqInput.value).toBe("1");
+      expect(respInput.value).toBe("1");
+      expect(intInput.value).toBe("100");
     });
 
     it("should display initial stat placeholders", () => {
@@ -66,7 +70,7 @@ describe("PerfSection Component", () => {
         </ZMKAppProvider>
       );
 
-      expect(screen.getByText(/Ping latency/i)).toBeInTheDocument();
+      expect(screen.getByText(/Last latency/i)).toBeInTheDocument();
       expect(screen.getByText(/Throughput/i)).toBeInTheDocument();
       expect(screen.getByText(/Packet loss/i)).toBeInTheDocument();
     });

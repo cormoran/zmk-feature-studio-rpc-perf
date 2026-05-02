@@ -257,7 +257,12 @@ function LatencyGraph({
           tickFormatter={(v: number) => `${v.toFixed(0)}s`}
           tick={{ fontSize: 11 }}
         />
-        <YAxis unit="ms" width={65} tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
+        <YAxis
+          unit="ms"
+          width={65}
+          tick={{ fontSize: 11 }}
+          domain={["auto", "auto"]}
+        />
         <Tooltip
           formatter={(val: number) => [`${val.toFixed(1)} ms`, "Latency"]}
           labelFormatter={(v) => `${Number(v).toFixed(1)}s`}
@@ -418,9 +423,8 @@ export function PerfSection() {
               );
               const windowDuration =
                 bytesWindowRef.current.length > 1
-                  ? (bytesWindowRef.current[
-                      bytesWindowRef.current.length - 1
-                    ].ts -
+                  ? (bytesWindowRef.current[bytesWindowRef.current.length - 1]
+                      .ts -
                       bytesWindowRef.current[0].ts) /
                     1000
                   : 0;
