@@ -2,9 +2,14 @@
 
 A ZMK module that measures the performance of the ZMK Studio custom RPC protocol.
 
+https://cormoran.github.io/zmk-feature-studio-rpc-perf/
+
+![](./img/connect-view.png)
+![](./img/perf-view.png)
+
 ## Features
 
-- **Adjustable payload sizes** – set both the request data size (bytes sent to the device) and the response data size (bytes the device echoes back), each up to 256 bytes
+- **Adjustable payload sizes** – set both the request data size and the response data size bytes
 - **Adjustable send frequency** – configurable interval (ms) between successive requests
 - **Live statistics** displayed in the web UI:
   - Ping latency (current / min / max in ms)
@@ -45,7 +50,7 @@ CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
 
 ### 3. Open the web UI
 
-Visit the deployed GitHub Pages URL or run the dev server locally:
+Visit the deployed [GitHub Pages URL](https://cormoran.github.io/zmk-feature-studio-rpc-perf/) or run the dev server locally:
 
 ```bash
 cd web
