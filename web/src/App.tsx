@@ -106,7 +106,7 @@ function App() {
 export function PerfSection() {
   const zmkApp = useContext(ZMKAppContext);
 
-  const [requestSize, setRequestSize] = useState(64);
+  const [requestSize, setRequestSize] = useState(10);
   const [responseSize, setResponseSize] = useState(64);
   const [intervalMs, setIntervalMs] = useState(500);
   const [isRunning, setIsRunning] = useState(false);
@@ -302,12 +302,12 @@ export function PerfSection() {
           <input
             id="interval"
             type="number"
-            min={50}
+            min={1}
             max={10000}
             value={intervalMs}
             disabled={isRunning}
             onChange={(e) =>
-              setIntervalMs(Math.max(50, parseInt(e.target.value) || 500))
+              setIntervalMs(Math.max(1, parseInt(e.target.value) || 500))
             }
           />
         </div>

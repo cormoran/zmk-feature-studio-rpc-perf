@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@cormoran/zmk-studio-react-hook": "github:cormoran/react-zmk-studio#77652d6",
-    "@zmkfirmware/zmk-studio-ts-client": "github:cormoran/zmk-studio-ts-client#custom-studio-protocol",
+    "@zmkfirmware/zmk-studio-ts-client": "github:cormoran/zmk-studio-ts-client#custom-studio-protocol+bluefy",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
