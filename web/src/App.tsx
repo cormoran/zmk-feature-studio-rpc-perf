@@ -264,7 +264,7 @@ function LatencyGraph({
           domain={["auto", "auto"]}
         />
         <Tooltip
-          formatter={(val: number) => [`${val.toFixed(1)} ms`, "Latency"]}
+          formatter={(val) => [`${Number(val).toFixed(1)} ms`, "Latency"]}
           labelFormatter={(v) => `${Number(v).toFixed(1)}s`}
         />
         <Line
