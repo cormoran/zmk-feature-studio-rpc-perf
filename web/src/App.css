@@ -202,6 +202,55 @@
   margin: 0;
 }
 
+/* Performance section */
+
+.perf-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.stat-card {
+  background: #f0f4f8;
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+  border: 1px solid #ddd;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: bold;
+  color: #333;
+  font-family: monospace;
+}
+
+.stat-value.stat-warn {
+  color: #c62828;
+}
+
+.stat-sub {
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 0.25rem;
+}
+
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
   .app {
@@ -276,6 +325,23 @@
   .response-box pre {
     background: #2d2d2d;
     color: #fff;
+  }
+
+  .stat-card {
+    background: #333;
+    border-color: #555;
+  }
+
+  .stat-label {
+    color: #aaa;
+  }
+
+  .stat-value {
+    color: #fff;
+  }
+
+  .stat-sub {
+    color: #999;
   }
 
   .app-footer {
