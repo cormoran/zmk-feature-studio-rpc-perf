@@ -22,6 +22,19 @@ jobs:
     # You can define any steps you want, and they will run before the agent starts.
     # If you do not check out your code, Copilot will do this for you.
     steps:
+      - name: Free disk space
+        run: |
+          echo $(df -a $1 | awk 'NR > 1 {avail+=$4} END {print avail}')
+          sudo rm -rf /usr/local/lib/android
+          echo $(df -a $1 | awk 'NR > 1 {avail+=$4} END {print avail}')
+          sudo rm -rf /usr/share/dotnet
+          echo $(df -a $1 | awk 'NR > 1 {avail+=$4} END {print avail}')
+          sudo rm -rf /opt/ghc
+          echo $(df -a $1 | awk 'NR > 1 {avail+=$4} END {print avail}')
+          sudo rm -rf /usr/local/graalvm
+          echo $(df -a $1 | awk 'NR > 1 {avail+=$4} END {print avail}')
+          sudo rm -rf /usr/local/.ghcup
+          echo $(df -a $1 | awk 'NR > 1 {avail+=$4} END {print avail}')
       - name: Checkout code
         uses: actions/checkout@v5
       - name: Install packages
