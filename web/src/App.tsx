@@ -304,9 +304,9 @@ function LatencyGraph({
 export function PerfSection() {
   const zmkApp = useContext(ZMKAppContext);
 
-  const [requestSize, setRequestSize] = useState(64);
-  const [responseSize, setResponseSize] = useState(64);
-  const [intervalMs, setIntervalMs] = useState(500);
+  const [requestSize, setRequestSize] = useState(1);
+  const [responseSize, setResponseSize] = useState(1);
+  const [intervalMs, setIntervalMs] = useState(100);
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState<PerfStats>(INITIAL_STATS);
   const [latencyHistory, setLatencyHistory] = useState<LatencyPoint[]>([]);
@@ -499,10 +499,10 @@ export function PerfSection() {
             id="req-size"
             value={requestSize}
             min={0}
-            max={256}
+            max={2048}
             smallStep={1}
             largeStep={32}
-            presets={[0, 32, 64, 128, 256]}
+            presets={[0, 32, 64, 128, 256, 512, 1024, 2048]}
             disabled={isRunning}
             onChange={setRequestSize}
           />
@@ -514,10 +514,10 @@ export function PerfSection() {
             id="resp-size"
             value={responseSize}
             min={0}
-            max={256}
+            max={2048}
             smallStep={1}
             largeStep={32}
-            presets={[0, 32, 64, 128, 256]}
+            presets={[0, 32, 64, 128, 256, 512, 1024, 2048]}
             disabled={isRunning}
             onChange={setResponseSize}
           />
