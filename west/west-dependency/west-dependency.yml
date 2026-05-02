@@ -1,5 +1,7 @@
 # List of this module's dependencies
 manifest:
+  remotes: []
+  projects: []
   # remotes:
   #   - name: remote-name
   #     url-base: https://github.com/remote-name

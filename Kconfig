@@ -1,10 +1,10 @@
-config ZMK_TEMPLATE_FEATURE
-    bool "Enable template feature"
+config ZMK_STUDIO_RPC_PERF
+    bool "Enable Studio RPC performance measurement"
 
-if ZMK_TEMPLATE_FEATURE
+if ZMK_STUDIO_RPC_PERF
 
-config ZMK_TEMPLATE_FEATURE_STUDIO_RPC
-    bool "Enable template feature custom Studio RPC"
+config ZMK_STUDIO_RPC_PERF_HANDLER
+    bool "Enable Studio RPC performance measurement handler"
     depends on ZMK_STUDIO
 
 endif

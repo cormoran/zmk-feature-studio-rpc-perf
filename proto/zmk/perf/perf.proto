@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package zmk.perf;
+
+// Sent from the web UI to the device
+message PerfRequest {
+    uint32 sequence_number = 1;
+    uint32 response_size = 2; // bytes the device should include in the response
+    bytes data = 3;           // request payload padding
+}
+
+// Sent from the device back to the web UI
+message PerfResponse {
+    uint32 sequence_number = 1; // echoed from request
+    bytes data = 2;             // response payload
+}
+
+message Request {
+    oneof request_type { PerfRequest perf = 1; }
+}
+
+message ErrorResponse { string message = 1; }
+
+message Response {
+    oneof response_type {
+        ErrorResponse error = 1;
+        PerfResponse perf = 2;
+    }
+}

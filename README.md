@@ -1,78 +1,64 @@
-# ZMK Module Template with Custom Web UI
+# zmk-feature-studio-rpc-perf
 
-This repository contains a template for a ZMK module with Web UI by using
-**unofficial** custom studio rpc protocol.
+A ZMK module that measures the performance of the ZMK Studio custom RPC protocol.
 
-Basic usage is the same to official template. Read through the
-[ZMK Module Creation](https://zmk.dev/docs/development/module-creation) page for
-details on how to configure this template.
+https://cormoran.github.io/zmk-feature-studio-rpc-perf/
 
-### Supporting custom studio RPC protocol
+![](./img/connect-view.png)
+![](./img/perf-view.png)
 
-This template contains sample implementation. Please edit and rename below files
-to implement your protocol.
+## Features
 
-- proto `proto/zmk/template/custom.proto` and `custom.options`
-- handler `src/studio/custom_handler.c`
-- flags in `Kconfig`
-- test `./tests/studio`
+- **Adjustable payload sizes** – set both the request data size and the response data size bytes
+- **Adjustable send frequency** – configurable interval (ms) between successive requests
+- **Live statistics** displayed in the web UI:
+  - Ping latency (current / min / max in ms)
+  - Throughput (bits per second, computed over a 3-second sliding window)
+  - Packet-loss rate (%) with raw sent/received counter
+- **USB and BLE connection** – the web UI supports both USB serial and BLE (GATT)
 
-### Implementing Web UI for the custom protocol
+## Setup
 
-`./web` contains boilerplate based on
-[vite template `react-ts`](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts)
-(`npm create vite@latest web -- --template react-ts`) and react hook library
-[@cormoran/react-zmk-studio](https://github.com/cormoran/react-zmk-studio).
+### 1. Add dependency to your `config/west.yml`
 
-Please refer
-[react-zmk-studio README](https://github.com/cormoran/react-zmk-studio/blob/main/README.md).
+```yaml
+manifest:
+  remotes:
+    ...
+    - name: cormoran
+      url-base: https://github.com/cormoran
+  projects:
+    ...
+    - name: zmk-feature-studio-rpc-perf
+      remote: cormoran
+      revision: main
+    # Required for unofficial studio custom RPC feature
+    - name: zmk
+      remote: cormoran
+      revision: v0.3+custom-studio-protocol
+      import:
+        file: app/west.yml
+```
 
-## Setup (Please edit!)
+### 2. Enable flags in your `config/<shield>.conf`
 
-You can use this zmk-module with below setup.
+```conf
+CONFIG_ZMK_STUDIO=y
+CONFIG_ZMK_STUDIO_RPC_PERF=y
+CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+```
 
-1. Add dependency to your `config/west.yml`.
+### 3. Open the web UI
 
-   ```yaml:config/west.yml
-   # Please update with your account and repository name after create repository from template
-   manifest:
-   remotes:
-       ...
-       - name: cormoran
-       url-base: https://github.com/cormoran
-   projects:
-       ...
-       - name: zmk-module-template-with-custom-studio-rpc
-       remote: cormoran
-       revision: main # or latest commit hash
-       # import: true # if this module has other dependencies
-       ...
-       # Below setting required to use unofficial studio custom PRC feature
-       - name: zmk
-       remote: cormoran
-       revision: v0.3+custom-studio-protocol
-       import:
-           file: app/west.yml
-   ```
+Visit the deployed [GitHub Pages URL](https://cormoran.github.io/zmk-feature-studio-rpc-perf/) or run the dev server locally:
 
-1. Enable flag in your `config/<shield>.conf`
+```bash
+cd web
+npm install
+npm run dev
+```
 
-   ```conf:<shield>.conf
-   # Enable standalone features
-   CONFIG_ZMK_TEMPLATE_FEATURE=y
-
-   # Optionally enable studio custom RPC features
-   CONFIG_ZMK_STUDIO=y
-   CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y
-   ```
-
-1. Update your `<keyboard>.keymap` like .....
-
-   ```
-   / {
-       ...
-   }
-   ```
+Then connect to your keyboard via USB or BLE and use the controls to start the performance test.
 
 ## Development Guide
 
@@ -108,8 +94,6 @@ pre-commit run --all-files
 pre-commit run
 ```
 
-The pre-commit hooks are automatically configured in the Copilot GitHub Actions environment and will run on all commits in CI.
-
 ### Setup
 
 There are two west workspace layout options.
@@ -139,15 +123,11 @@ west-workspace
   - zmk
   - zephyr
   - ...
-  # You can develop other zephyr modules in this workspace
-  - your-other-repo
 ```
-
-You can switch between modules by removing `west-workspace/.west` and re-executing `west init ...`.
 
 #### Option2: Download dependencies in ./dependencies (Enabled in dev-container)
 
-Choose this option if you want to download dependencies under this directory (like node_modules in npm). This option is useful for specifying cache target in CI. The layout is relatively easy to recognize if you want to isolate dependencies.
+Choose this option if you want to download dependencies under this directory (like node_modules in npm). This option is useful for specifying cache target in CI.
 
 ```bash
 git clone <this repository>
@@ -196,15 +176,13 @@ Tests can be executed by below command:
 python -m unittest
 ```
 
-If you want to execute west command manually, run below. (for zmk-build, the result is not verified.)
+If you want to execute west command manually, run below.
 
 ```
 # Build test firmware for xiao
-# `-m tests/zmk-config .` means tests/zmk-config and this repo are added as additional zephyr module
 west zmk-build tests/zmk-config/config -m tests/zmk-config .
 
 # Run zmk test cases
-# -m . is required to add this module to build
 west zmk-test tests -m .
 ```
 
@@ -229,7 +207,7 @@ Github actions are pre-configured to publish web UI to github pages.
 1. Click "Run workflow"
 
 Then, the Web UI will be available in
-`https://<your github account>.github.io/<repository name>/` like https://cormoran.github.io/zmk-module-template-with-custom-studio-rpc.
+`https://<your github account>.github.io/<repository name>/`.
 
 ### Cloudflare Workers (Pull Request Preview)
 
@@ -246,17 +224,9 @@ For previewing web UI changes in pull requests:
 
 3. Create a pull request with web UI changes - the preview deployment will trigger automatically and wait for approval
 
-## Sync changes in template
-
-By running `Actions > Sync Changes in Template > Run workflow`, pull request is created to your repository to reflect changes in template repository.
-
-If the template contains changes in `.github/workflows/*`, registering your github personal access token as `GH_TOKEN` to repository secret is required.
-The fine-grained token requires write to contents, pull-requests and workflows.
-Please see detail in [actions-template-sync](https://github.com/AndreasAugustin/actions-template-sync).
-
 ## More Info
 
-For more info on modules, you can read through through the
+For more info on modules, you can read through the
 [Zephyr modules page](https://docs.zephyrproject.org/3.5.0/develop/modules.html)
 and [ZMK's page on using modules](https://zmk.dev/docs/features/modules).
 [Zephyr's west manifest page](https://docs.zephyrproject.org/3.5.0/develop/west/manifest.html#west-manifests)

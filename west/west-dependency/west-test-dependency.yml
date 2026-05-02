@@ -6,9 +6,12 @@ manifest:
     - name: cormoran
       url-base: https://github.com/cormoran
   projects:
+    - name: zmk-module-ble-management
+      remote: cormoran
+      revision: main
     - name: zmk
       remote: cormoran
-      revision: v0.3-branch+custom-studio-protocol
+      revision: v0.3-branch+custom-studio-protocol+ble
       import:
         file: app/west.yml
       clone-depth: 1

@@ -4,10 +4,10 @@ config ZMK_KEYBOARD_NAME
     default "MAK"
 
 config ZMK_BLE
-    def_bool n
+    def_bool y
 
 config SETTINGS
-    def_bool n
+    def_bool y
 
 config MY_AWESOME_KEYBOARD_SPECIAL_FEATURE
     bool "Enable special feature for My Awesome Keyboard"

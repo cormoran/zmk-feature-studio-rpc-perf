@@ -1,0 +1,6 @@
+# Nanopb options file for perf.proto
+# Define max sizes for variable-length fields
+
+zmk.perf.PerfRequest.data       max_size:2048
+zmk.perf.PerfResponse.data      max_size:2048
+zmk.perf.ErrorResponse.message  max_size:64

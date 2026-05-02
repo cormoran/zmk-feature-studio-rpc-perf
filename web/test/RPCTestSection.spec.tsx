@@ -1,9 +1,5 @@
 /**
- * Tests for RPCTestSection component
- *
- * This test demonstrates how to use react-zmk-studio test helpers to test
- * components that interact with ZMK devices. This serves as a reference
- * implementation for template users.
+ * Tests for PerfSection component
  */
 
 import { render, screen } from "@testing-library/react";
@@ -11,12 +7,11 @@ import {
   createConnectedMockZMKApp,
   ZMKAppProvider,
 } from "@cormoran/zmk-studio-react-hook/testing";
-import { RPCTestSection, SUBSYSTEM_IDENTIFIER } from "../src/App";
+import { PerfSection, SUBSYSTEM_IDENTIFIER } from "../src/App";
 
-describe("RPCTestSection Component", () => {
+describe("PerfSection Component", () => {
   describe("With Subsystem", () => {
-    it("should render RPC controls when subsystem is found", () => {
-      // Create a connected mock ZMK app with the required subsystem
+    it("should render performance controls when subsystem is found", () => {
       const mockZMKApp = createConnectedMockZMKApp({
         deviceName: "Test Device",
         subsystems: [SUBSYSTEM_IDENTIFIER],
@@ -24,65 +19,86 @@ describe("RPCTestSection Component", () => {
 
       render(
         <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
+          <PerfSection />
         </ZMKAppProvider>
       );
 
-      // Check for RPC test UI elements
-      expect(screen.getByText(/RPC Test/i)).toBeInTheDocument();
-      expect(screen.getByText(/Send a sample request/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Value:/i)).toBeInTheDocument();
-      expect(screen.getByText(/Send Request/i)).toBeInTheDocument();
+      expect(screen.getByText(/Performance Test/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Request size/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Response size/i)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/Interval between requests/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Start/i })
+      ).toBeInTheDocument();
     });
 
-    it("should show default input value", () => {
+    it("should show default input values", () => {
       const mockZMKApp = createConnectedMockZMKApp({
         subsystems: [SUBSYSTEM_IDENTIFIER],
       });
 
       render(
         <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
+          <PerfSection />
         </ZMKAppProvider>
       );
 
-      // Check that the input has a default value
-      const input = screen.getByLabelText(/Value:/i) as HTMLInputElement;
-      expect(input.value).toBe("42");
+      const reqInput = screen.getByLabelText(
+        /Request size/i
+      ) as HTMLInputElement;
+      const respInput = screen.getByLabelText(
+        /Response size/i
+      ) as HTMLInputElement;
+      const intInput = screen.getByLabelText(
+        /Interval between requests/i
+      ) as HTMLInputElement;
+      expect(reqInput.value).toBe("1");
+      expect(respInput.value).toBe("1");
+      expect(intInput.value).toBe("100");
+    });
+
+    it("should display initial stat placeholders", () => {
+      const mockZMKApp = createConnectedMockZMKApp({
+        subsystems: [SUBSYSTEM_IDENTIFIER],
+      });
+
+      render(
+        <ZMKAppProvider value={mockZMKApp}>
+          <PerfSection />
+        </ZMKAppProvider>
+      );
+
+      expect(screen.getByText(/Last latency/i)).toBeInTheDocument();
+      expect(screen.getByText(/Throughput/i)).toBeInTheDocument();
+      expect(screen.getByText(/Packet loss/i)).toBeInTheDocument();
     });
   });
 
   describe("Without Subsystem", () => {
     it("should show warning when subsystem is not found", () => {
-      // Create a connected mock ZMK app without the required subsystem
       const mockZMKApp = createConnectedMockZMKApp({
         deviceName: "Test Device",
-        subsystems: [], // No subsystems
+        subsystems: [],
       });
 
       render(
         <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
+          <PerfSection />
         </ZMKAppProvider>
       );
 
-      // Check for warning message
       expect(
-        screen.getByText(/Subsystem "zmk__template" not found/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          /Make sure your firmware includes the template module/i
-        )
+        screen.getByText(/Subsystem "zmk__perf" not found/i)
       ).toBeInTheDocument();
     });
   });
 
   describe("Without ZMKAppContext", () => {
     it("should not render when ZMKAppContext is not provided", () => {
-      const { container } = render(<RPCTestSection />);
+      const { container } = render(<PerfSection />);
 
-      // Component should return null when context is not available
       expect(container.firstChild).toBeNull();
     });
   });
