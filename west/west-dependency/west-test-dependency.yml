@@ -8,10 +8,10 @@ manifest:
   projects:
     - name: zmk-module-ble-management
       remote: cormoran
-      revision: main
+      revision: migrate-to-v4
     - name: zmk
       remote: cormoran
-      revision: v0.3-branch+custom-studio-protocol+ble
+      revision: main+custom-studio-protocol
       import:
         file: app/west.yml
       clone-depth: 1
