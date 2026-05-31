@@ -7,15 +7,25 @@ config ZMK_STUDIO_RPC_PERF_HANDLER
     bool "Enable Studio RPC performance measurement handler"
     depends on ZMK_STUDIO
 
-config ZMK_STUDIO_RPC_PERF_SPLIT
-    bool "Enable split performance measurement over relay events"
+config ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY
+    bool "Relay Studio RPC performance requests across split halves"
     depends on ZMK_SPLIT && ZMK_SPLIT_BLE
     select ZMK_SPLIT_RELAY_EVENT
-    default y if ZMK_SPLIT
+    help
+      Relays performance RPC requests from the central side to split
+      peripherals, and relays performance responses back to the central side.
+      Increase CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN if the configured relay
+      chunk size does not fit in the default split relay event payload size.
+
+config ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE
+    int "Maximum Studio RPC performance relay chunk size"
+    default 64
+    range 1 255
+    depends on ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY
 
 config ZMK_STUDIO_RPC_PERF_SPLIT_TIMEOUT_MS
     int "Timeout for split performance responses in milliseconds"
-    depends on ZMK_STUDIO_RPC_PERF_SPLIT
+    depends on ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY
     default 10000
 
 endif
