@@ -17,5 +17,3 @@ include:
     board: xiao_ble//zmk
     shield: my_awesome_keyboard
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y -DCONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN=80 -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE=64
-
----
