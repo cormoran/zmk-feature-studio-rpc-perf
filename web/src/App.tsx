@@ -189,10 +189,47 @@ function encodedPerfRequestLength(
   ).finish().length;
 }
 
+function varintLength(value: number): number {
+  let length = 1;
+  while (value >= 0x80) {
+    value = Math.floor(value / 0x80);
+    length += 1;
+  }
+  return length;
+}
+
+function lengthDelimitedFieldLength(
+  tagLength: number,
+  payloadLength: number
+): number {
+  return tagLength + varintLength(payloadLength) + payloadLength;
+}
+
+function framedStudioCustomCallRequestLength(
+  customPayloadLength: number,
+  subsystemIndex: number | undefined
+): number {
+  const subsystemIndexLength = subsystemIndex && subsystemIndex > 0 ? 2 : 0;
+  const callRequestLength =
+    subsystemIndexLength + lengthDelimitedFieldLength(1, customPayloadLength);
+  const customRequestLength = lengthDelimitedFieldLength(1, callRequestLength);
+
+  // Reserve a two-byte request_id varint because request IDs quickly pass 127.
+  const requestIdLength = 3;
+  const studioCustomTagLength = 2;
+  const studioRequestLength =
+    requestIdLength +
+    lengthDelimitedFieldLength(studioCustomTagLength, customRequestLength);
+
+  // Studio transport framing adds SOF and EOF. This does not include rare escape bytes.
+  return studioRequestLength + 2;
+}
+
 function requestSizeMax(
   settings: SettingsResponse | null,
   responseSize: number,
-  split: boolean
+  split: boolean,
+  subsystemIndex: number | undefined
 ) {
   if (!settings) return DEFAULT_DATA_SIZE_MAX;
 
@@ -208,7 +245,19 @@ function requestSizeMax(
   let hi = max;
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2);
-    if (encodedPerfRequestLength(mid, responseSize, split) <= payloadMax) {
+    const customPayloadLength = encodedPerfRequestLength(
+      mid,
+      responseSize,
+      split
+    );
+    const framedRequestLength = framedStudioCustomCallRequestLength(
+      customPayloadLength,
+      subsystemIndex
+    );
+    if (
+      customPayloadLength <= payloadMax &&
+      framedRequestLength <= settings.studioRpcRxBufSize
+    ) {
       lo = mid;
     } else {
       hi = mid - 1;
@@ -388,6 +437,7 @@ export function PerfSection() {
   const [latencyHistory, setLatencyHistory] = useState<LatencyPoint[]>([]);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const subsystem = zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER) ?? null;
 
   const seqRef = useRef(0);
   const statsRef = useRef({ ...INITIAL_STATS });
@@ -402,7 +452,8 @@ export function PerfSection() {
   const maxRequestSize = requestSizeMax(
     settings,
     effectiveResponseSize,
-    useSplit
+    useSplit,
+    subsystem?.index
   );
   const effectiveRequestSize = Math.min(requestSize, maxRequestSize);
 
@@ -579,7 +630,6 @@ export function PerfSection() {
   // Keep serviceRef in sync when the connection changes
   useEffect(() => {
     if (!zmkApp) return;
-    const subsystem = zmkApp.findSubsystem(SUBSYSTEM_IDENTIFIER);
     if (!zmkApp.state.connection || !subsystem) {
       serviceRef.current = null;
       return;
@@ -593,14 +643,12 @@ export function PerfSection() {
       loadSettings(service);
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [zmkApp, loadSettings]);
+  }, [zmkApp, subsystem, loadSettings]);
 
   // Stop on unmount
   useEffect(() => () => stop(), [stop]);
 
   if (!zmkApp) return null;
-
-  const subsystem = zmkApp.findSubsystem(SUBSYSTEM_IDENTIFIER);
 
   if (!subsystem) {
     return (
