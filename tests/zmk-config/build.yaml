@@ -6,5 +6,16 @@ include:
     snippets:
       - studio-rpc-usb-uart
       - zmk-usb-logging
+  - artifact: my_awesome_keyboard_split_central_with_custom_rpc_support
+    board: xiao_ble//zmk
+    shield: my_awesome_keyboard
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT=y
+    snippets:
+      - studio-rpc-usb-uart
+      - zmk-usb-logging
+  - artifact: my_awesome_keyboard_split_peripheral_with_perf_support
+    board: xiao_ble//zmk
+    shield: my_awesome_keyboard
+    cmake-args: -DCONFIG_ZMK_USB=n -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT=y
 
 ---

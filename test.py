@@ -50,6 +50,25 @@ class WestCommandsTests(unittest.TestCase):
                 "CONFIG_ZMK_STUDIO_RPC_PERF=y",
                 "CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y",
             ],
+            "my_awesome_keyboard_split_central_with_custom_rpc_support": [
+                "CONFIG_MY_AWESOME_KEYBOARD_SPECIAL_FEATURE=y",
+                "CONFIG_ZMK_STUDIO=y",
+                "CONFIG_ZMK_STUDIO_RPC_PERF=y",
+                "CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y",
+                "CONFIG_ZMK_SPLIT=y",
+                "CONFIG_ZMK_SPLIT_ROLE_CENTRAL=y",
+                "CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT=y",
+                "CONFIG_ZMK_SPLIT_RELAY_EVENT=y",
+            ],
+            "my_awesome_keyboard_split_peripheral_with_perf_support": [
+                "CONFIG_MY_AWESOME_KEYBOARD_SPECIAL_FEATURE=y",
+                "CONFIG_ZMK_STUDIO_RPC_PERF=y",
+                "CONFIG_ZMK_SPLIT=y",
+                NotFound("CONFIG_ZMK_SPLIT_ROLE_CENTRAL=y"),
+                "CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT=y",
+                "CONFIG_ZMK_SPLIT_RELAY_EVENT=y",
+                NotFound("CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y"),
+            ],
         }
 
         for artifact in artifacts_and_expected_config.keys():
