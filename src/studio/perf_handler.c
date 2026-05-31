@@ -257,6 +257,8 @@ ZMK_SUBSCRIPTION(perf_split_relay_request, zmk_perf_split_relay_request);
 
 #if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER)
 
+static zmk_perf_Request perf_request_decode_buffer;
+
 static int handle_perf_request(const zmk_perf_PerfRequest *req, zmk_perf_Response *resp) {
     LOG_DBG("Received perf request: seq=%u response_size=%u request_data_len=%zu split=%d",
             req->sequence_number, req->response_size, req->data.size, req->split);
@@ -270,21 +272,21 @@ static int handle_perf_request(const zmk_perf_PerfRequest *req, zmk_perf_Respons
 #endif
     }
 
-    zmk_perf_PerfResponse result = zmk_perf_PerfResponse_init_zero;
+    resp->which_response_type = zmk_perf_Response_perf_tag;
+    zmk_perf_PerfResponse *result = &resp->response_type.perf;
+    *result = (zmk_perf_PerfResponse)zmk_perf_PerfResponse_init_zero;
 
-    result.sequence_number = req->sequence_number;
-    result.split = false;
-    result.source = ZMK_RELAY_EVENT_SOURCE_SELF;
+    result->sequence_number = req->sequence_number;
+    result->split = false;
+    result->source = ZMK_RELAY_EVENT_SOURCE_SELF;
 
     uint32_t data_size = req->response_size;
-    if (data_size > sizeof(result.data.bytes)) {
-        data_size = sizeof(result.data.bytes);
+    if (data_size > sizeof(result->data.bytes)) {
+        data_size = sizeof(result->data.bytes);
     }
-    memset(result.data.bytes, 0xAA, data_size);
-    result.data.size = data_size;
+    memset(result->data.bytes, 0xAA, data_size);
+    result->data.size = data_size;
 
-    resp->which_response_type = zmk_perf_Response_perf_tag;
-    resp->response_type.perf = result;
     return 0;
 }
 
@@ -305,11 +307,11 @@ static bool perf_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
     zmk_perf_Response *resp =
         ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER_ALLOCATE(zmk__perf, encode_response);
 
-    zmk_perf_Request req = zmk_perf_Request_init_zero;
+    perf_request_decode_buffer = (zmk_perf_Request)zmk_perf_Request_init_zero;
 
     pb_istream_t req_stream =
         pb_istream_from_buffer(raw_request->payload.bytes, raw_request->payload.size);
-    if (!pb_decode(&req_stream, zmk_perf_Request_fields, &req)) {
+    if (!pb_decode(&req_stream, zmk_perf_Request_fields, &perf_request_decode_buffer)) {
         LOG_WRN("Failed to decode perf request: %s", PB_GET_ERROR(&req_stream));
         zmk_perf_ErrorResponse err = zmk_perf_ErrorResponse_init_zero;
         snprintf(err.message, sizeof(err.message), "Failed to decode request");
@@ -319,12 +321,12 @@ static bool perf_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
     }
 
     int ret = 0;
-    switch (req.which_request_type) {
+    switch (perf_request_decode_buffer.which_request_type) {
     case zmk_perf_Request_perf_tag:
-        ret = handle_perf_request(&req.request_type.perf, resp);
+        ret = handle_perf_request(&perf_request_decode_buffer.request_type.perf, resp);
         break;
     default:
-        LOG_WRN("Unsupported perf request type: %d", req.which_request_type);
+        LOG_WRN("Unsupported perf request type: %d", perf_request_decode_buffer.which_request_type);
         ret = -ENOTSUP;
     }
 
