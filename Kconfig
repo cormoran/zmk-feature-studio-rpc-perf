@@ -14,14 +14,8 @@ config ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY
     help
       Relays performance RPC requests from the central side to split
       peripherals, and relays performance responses back to the central side.
-      Increase CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN if the configured relay
-      chunk size does not fit in the default split relay event payload size.
-
-config ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE
-    int "Maximum Studio RPC performance relay chunk size"
-    default 64
-    range 1 255
-    depends on ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY
+      Increase CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN to allow larger split
+      performance request and response payloads.
 
 config ZMK_STUDIO_RPC_PERF_SPLIT_TIMEOUT_MS
     int "Timeout for split performance responses in milliseconds"

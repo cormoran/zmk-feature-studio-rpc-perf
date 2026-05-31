@@ -53,14 +53,13 @@ CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
 
 For BLE split testing, enable the module on both halves. The Studio-connected central also needs
 `CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y`; the peripheral only needs `CONFIG_ZMK_STUDIO_RPC_PERF=y`.
-The split path uses typed ZMK relay events, so enable the perf split RPC relay config and set
-the relay payload size large enough for the configured chunk size.
+The split path uses typed ZMK relay events, so enable the perf split RPC relay config. Increase
+the relay event payload size if you need larger split request or response payloads.
 
 ```conf
 CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
-CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN=80
-CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE=64
-CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_TIMEOUT_MS=10000
+# Optionally increase below settings
+# CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN=256
 ```
 
 ### 3. Open the web UI

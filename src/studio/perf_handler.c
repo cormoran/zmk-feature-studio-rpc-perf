@@ -25,38 +25,49 @@
 #include <zmk/studio/custom.h>
 #endif
 
-#if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY) &&                                      \
-    IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
-#include <zmk/split/central.h>
-#endif
-
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #define PERF_MAX_DATA_SIZE 2048
 
 #if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY)
 
+struct zmk_perf_split_relay_request_header {
+    uint8_t source;
+    uint32_t sequence_number;
+    uint16_t response_size;
+    uint16_t data_size;
+} __packed;
+
+struct zmk_perf_split_relay_response_header {
+    uint8_t source;
+    uint32_t sequence_number;
+    uint16_t data_size;
+} __packed;
+
+#define PERF_SPLIT_RELAY_REQUEST_DATA_SIZE                                                         \
+    (CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN - sizeof(struct zmk_perf_split_relay_request_header))
+#define PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE                                                        \
+    (CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN - sizeof(struct zmk_perf_split_relay_response_header))
+
 struct zmk_perf_split_relay_request {
     uint8_t source;
     uint32_t sequence_number;
-    uint16_t request_size;
     uint16_t response_size;
-    uint16_t offset;
-    uint8_t chunk_size;
-    uint8_t data[CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE];
+    uint16_t data_size;
+    uint8_t data[PERF_SPLIT_RELAY_REQUEST_DATA_SIZE];
 } __packed;
 
 struct zmk_perf_split_relay_response {
     uint8_t source;
     uint32_t sequence_number;
-    uint16_t response_size;
-    uint16_t offset;
-    uint8_t chunk_size;
-    uint8_t data[CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE];
+    uint16_t data_size;
+    uint8_t data[PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE];
 } __packed;
 
-BUILD_ASSERT(CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE <= UINT8_MAX,
-             "CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE must fit in uint8_t");
+BUILD_ASSERT(PERF_SPLIT_RELAY_REQUEST_DATA_SIZE > 0,
+             "CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN is too small for perf relay requests");
+BUILD_ASSERT(PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE > 0,
+             "CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN is too small for perf relay responses");
 BUILD_ASSERT(sizeof(struct zmk_perf_split_relay_request) <= CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN,
              "CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN is too small for perf relay requests");
 BUILD_ASSERT(sizeof(struct zmk_perf_split_relay_response) <= CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN,
@@ -82,58 +93,27 @@ static struct {
     bool complete;
     uint32_t sequence_number;
     uint8_t source;
-    uint16_t expected_size;
-    uint16_t received_size;
     zmk_perf_PerfResponse response;
 } perf_split_response_state;
 
-static size_t perf_split_request_chunk_max(void) {
-    return CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE;
-}
-
 static int perf_split_send_request(const zmk_perf_PerfRequest *req) {
-    size_t max_chunk_size = perf_split_request_chunk_max();
-    uint16_t request_size = req->data.size;
-    uint16_t offset = 0;
-
-    if (request_size > 0 && max_chunk_size == 0) {
+    if (req->data.size > PERF_SPLIT_RELAY_REQUEST_DATA_SIZE ||
+        req->response_size > PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE) {
         return -EMSGSIZE;
     }
 
-    do {
-        size_t remaining = request_size - offset;
-        uint8_t chunk_size = MIN(max_chunk_size, remaining);
-        struct zmk_perf_split_relay_request event = {
-            .source = ZMK_RELAY_EVENT_SOURCE_SELF,
-            .sequence_number = req->sequence_number,
-            .request_size = request_size,
-            .response_size = req->response_size,
-            .offset = offset,
-            .chunk_size = chunk_size,
-        };
+    struct zmk_perf_split_relay_request event = {
+        .source = ZMK_RELAY_EVENT_SOURCE_SELF,
+        .sequence_number = req->sequence_number,
+        .response_size = req->response_size,
+        .data_size = req->data.size,
+    };
 
-        memcpy(event.data, req->data.bytes + offset, chunk_size);
-        int ret = raise_zmk_perf_split_relay_request(event);
-        if (ret < 0) {
-            return ret;
-        }
-
-        if (request_size == 0) {
-            break;
-        }
-
-        offset += chunk_size;
-    } while (offset < request_size);
-
-    return 0;
+    memcpy(event.data, req->data.bytes, req->data.size);
+    return raise_zmk_perf_split_relay_request(event);
 }
 
 static int perf_split_handle_response_event(const struct zmk_perf_split_relay_response *ev) {
-    if (ev->chunk_size > sizeof(ev->data)) {
-        LOG_WRN("Malformed split perf response chunk: chunk=%u", ev->chunk_size);
-        return ZMK_EV_EVENT_HANDLED;
-    }
-
     k_mutex_lock(&perf_split_response_mutex, K_FOREVER);
 
     if (!perf_split_response_state.waiting ||
@@ -142,36 +122,23 @@ static int perf_split_handle_response_event(const struct zmk_perf_split_relay_re
         return ZMK_EV_EVENT_HANDLED;
     }
 
-    if (ev->response_size > sizeof(perf_split_response_state.response.data.bytes) ||
-        ev->offset + ev->chunk_size > ev->response_size) {
-        LOG_WRN("Invalid split perf response chunk: seq=%u size=%u offset=%u chunk=%u",
-                ev->sequence_number, ev->response_size, ev->offset, ev->chunk_size);
+    if (ev->data_size > sizeof(ev->data) ||
+        ev->data_size > sizeof(perf_split_response_state.response.data.bytes)) {
+        LOG_WRN("Invalid split perf response: seq=%u size=%u", ev->sequence_number, ev->data_size);
         k_mutex_unlock(&perf_split_response_mutex);
         return ZMK_EV_EVENT_HANDLED;
     }
 
-    if (ev->offset == 0) {
-        perf_split_response_state.expected_size = ev->response_size;
-        perf_split_response_state.received_size = 0;
-        perf_split_response_state.response = (zmk_perf_PerfResponse)zmk_perf_PerfResponse_init_zero;
-        perf_split_response_state.response.sequence_number = ev->sequence_number;
-        perf_split_response_state.response.split = true;
-        perf_split_response_state.response.source = ev->source;
-        perf_split_response_state.source = ev->source;
-    }
-
-    if (ev->chunk_size > 0) {
-        memcpy(perf_split_response_state.response.data.bytes + ev->offset, ev->data,
-               ev->chunk_size);
-    }
-    perf_split_response_state.received_size += ev->chunk_size;
-
-    if (perf_split_response_state.received_size >= perf_split_response_state.expected_size) {
-        perf_split_response_state.response.data.size = perf_split_response_state.expected_size;
-        perf_split_response_state.waiting = false;
-        perf_split_response_state.complete = true;
-        k_sem_give(&perf_split_response_sem);
-    }
+    perf_split_response_state.response = (zmk_perf_PerfResponse)zmk_perf_PerfResponse_init_zero;
+    perf_split_response_state.response.sequence_number = ev->sequence_number;
+    perf_split_response_state.response.split = true;
+    perf_split_response_state.response.source = ev->source;
+    perf_split_response_state.source = ev->source;
+    memcpy(perf_split_response_state.response.data.bytes, ev->data, ev->data_size);
+    perf_split_response_state.response.data.size = ev->data_size;
+    perf_split_response_state.waiting = false;
+    perf_split_response_state.complete = true;
+    k_sem_give(&perf_split_response_sem);
 
     k_mutex_unlock(&perf_split_response_mutex);
     return ZMK_EV_EVENT_HANDLED;
@@ -196,8 +163,6 @@ static int handle_split_perf_request(const zmk_perf_PerfRequest *req, zmk_perf_R
     perf_split_response_state.waiting = true;
     perf_split_response_state.complete = false;
     perf_split_response_state.sequence_number = req->sequence_number;
-    perf_split_response_state.expected_size = 0;
-    perf_split_response_state.received_size = 0;
     perf_split_response_state.response = (zmk_perf_PerfResponse)zmk_perf_PerfResponse_init_zero;
     k_mutex_unlock(&perf_split_response_mutex);
 
@@ -235,87 +200,32 @@ static int handle_split_perf_request(const zmk_perf_PerfRequest *req, zmk_perf_R
 
 #else
 
-static struct {
-    bool receiving;
-    uint32_t sequence_number;
-    uint16_t request_size;
-    uint16_t response_size;
-    uint16_t received_size;
-} perf_split_request_state;
-
-static size_t perf_split_response_chunk_max(void) {
-    return CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY_CHUNK_SIZE;
-}
-
 static int perf_split_send_response(uint32_t sequence_number, uint16_t response_size) {
-    size_t max_chunk_size = perf_split_response_chunk_max();
-    uint16_t offset = 0;
-
-    if (response_size > 0 && max_chunk_size == 0) {
+    if (response_size > PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE) {
         return -EMSGSIZE;
     }
 
-    do {
-        size_t remaining = response_size - offset;
-        uint8_t chunk_size = MIN(max_chunk_size, remaining);
-        struct zmk_perf_split_relay_response event = {
-            .source = ZMK_RELAY_EVENT_SOURCE_SELF,
-            .sequence_number = sequence_number,
-            .response_size = response_size,
-            .offset = offset,
-            .chunk_size = chunk_size,
-        };
+    struct zmk_perf_split_relay_response event = {
+        .source = ZMK_RELAY_EVENT_SOURCE_SELF,
+        .sequence_number = sequence_number,
+        .data_size = response_size,
+    };
 
-        if (chunk_size > 0) {
-            memset(event.data, 0xAA, chunk_size);
-        }
-
-        int ret = raise_zmk_perf_split_relay_response(event);
-        if (ret < 0) {
-            return ret;
-        }
-
-        if (response_size == 0) {
-            break;
-        }
-
-        offset += chunk_size;
-    } while (offset < response_size);
-
-    return 0;
+    memset(event.data, 0xAA, response_size);
+    return raise_zmk_perf_split_relay_response(event);
 }
 
 static int perf_split_handle_request_event(const struct zmk_perf_split_relay_request *ev) {
-    if (ev->chunk_size > sizeof(ev->data)) {
-        LOG_WRN("Malformed split perf request chunk: chunk=%u", ev->chunk_size);
+    if (ev->data_size > sizeof(ev->data) ||
+        ev->response_size > PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE) {
+        LOG_WRN("Invalid split perf request: seq=%u req=%u resp=%u", ev->sequence_number,
+                ev->data_size, ev->response_size);
         return ZMK_EV_EVENT_HANDLED;
     }
 
-    if (ev->response_size > PERF_MAX_DATA_SIZE || ev->offset + ev->chunk_size > ev->request_size) {
-        LOG_WRN("Invalid split perf request chunk: seq=%u req=%u resp=%u offset=%u chunk=%u",
-                ev->sequence_number, ev->request_size, ev->response_size, ev->offset,
-                ev->chunk_size);
-        return ZMK_EV_EVENT_HANDLED;
-    }
-
-    if (!perf_split_request_state.receiving ||
-        perf_split_request_state.sequence_number != ev->sequence_number || ev->offset == 0) {
-        perf_split_request_state.receiving = true;
-        perf_split_request_state.sequence_number = ev->sequence_number;
-        perf_split_request_state.request_size = ev->request_size;
-        perf_split_request_state.response_size = ev->response_size;
-        perf_split_request_state.received_size = 0;
-    }
-
-    perf_split_request_state.received_size += ev->chunk_size;
-
-    if (perf_split_request_state.received_size >= perf_split_request_state.request_size) {
-        perf_split_request_state.receiving = false;
-        int ret =
-            perf_split_send_response(ev->sequence_number, perf_split_request_state.response_size);
-        if (ret < 0) {
-            LOG_WRN("Failed to send split perf response: %d", ret);
-        }
+    int ret = perf_split_send_response(ev->sequence_number, ev->response_size);
+    if (ret < 0) {
+        LOG_WRN("Failed to send split perf response: %d", ret);
     }
 
     return ZMK_EV_EVENT_HANDLED;
