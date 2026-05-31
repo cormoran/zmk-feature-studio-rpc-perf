@@ -114,6 +114,7 @@ describe("PerfSection Component", () => {
     });
 
     it("should display firmware RPC limits", async () => {
+      const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
       const mockZMKApp = createConnectedMockZMKApp({
         subsystems: [SUBSYSTEM_IDENTIFIER],
       });
@@ -130,6 +131,7 @@ describe("PerfSection Component", () => {
         expect(screen.getByText(/Split relay payload/i)).toBeInTheDocument();
         expect(screen.getByText("128 B")).toBeInTheDocument();
       });
+      expect(call_rpc).toHaveBeenCalledTimes(1);
     });
   });
 

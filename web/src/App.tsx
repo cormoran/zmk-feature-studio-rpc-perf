@@ -438,6 +438,8 @@ export function PerfSection() {
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const subsystem = zmkApp?.findSubsystem(SUBSYSTEM_IDENTIFIER) ?? null;
+  const connection = zmkApp?.state.connection ?? null;
+  const subsystemIndex = subsystem?.index;
 
   const seqRef = useRef(0);
   const statsRef = useRef({ ...INITIAL_STATS });
@@ -453,7 +455,7 @@ export function PerfSection() {
     settings,
     effectiveResponseSize,
     useSplit,
-    subsystem?.index
+    subsystemIndex
   );
   const effectiveRequestSize = Math.min(requestSize, maxRequestSize);
 
@@ -629,21 +631,17 @@ export function PerfSection() {
 
   // Keep serviceRef in sync when the connection changes
   useEffect(() => {
-    if (!zmkApp) return;
-    if (!zmkApp.state.connection || !subsystem) {
+    if (!connection || subsystemIndex === undefined) {
       serviceRef.current = null;
       return;
     }
-    const service = new ZMKCustomSubsystem(
-      zmkApp.state.connection,
-      subsystem.index
-    );
+    const service = new ZMKCustomSubsystem(connection, subsystemIndex);
     serviceRef.current = service;
     const timeoutId = window.setTimeout(() => {
       loadSettings(service);
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [zmkApp, subsystem, loadSettings]);
+  }, [connection, subsystemIndex, loadSettings]);
 
   // Stop on unmount
   useEffect(() => () => stop(), [stop]);
