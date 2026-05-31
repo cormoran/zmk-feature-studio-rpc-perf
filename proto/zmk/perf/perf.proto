@@ -7,16 +7,38 @@ message PerfRequest {
     uint32 sequence_number = 1;
     uint32 response_size = 2; // bytes the device should include in the response
     bytes data = 3;           // request payload padding
+    bool split = 4;           // route through split relay events
 }
 
 // Sent from the device back to the web UI
 message PerfResponse {
     uint32 sequence_number = 1; // echoed from request
     bytes data = 2;             // response payload
+    bool split = 3;             // true when the response came via split relay events
+    uint32 source = 4;          // split peripheral source id, when split is true
+}
+
+// Sent from the web UI to query configured payload limits
+message SettingsRequest {}
+
+// Sent from the device back to the web UI with relevant build-time limits
+message SettingsResponse {
+    uint32 studio_rpc_rx_buf_size = 1;
+    uint32 studio_rpc_tx_buf_size = 2;
+    uint32 custom_subsystem_request_payload_max_bytes = 3;
+    bool split_relay_enabled = 4;
+    uint32 split_relay_event_data_len = 5;
+    uint32 perf_request_data_max_bytes = 6;
+    uint32 perf_response_data_max_bytes = 7;
+    uint32 split_relay_request_data_max_bytes = 8;
+    uint32 split_relay_response_data_max_bytes = 9;
 }
 
 message Request {
-    oneof request_type { PerfRequest perf = 1; }
+    oneof request_type {
+        PerfRequest perf = 1;
+        SettingsRequest settings = 2;
+    }
 }
 
 message ErrorResponse { string message = 1; }
@@ -25,5 +47,6 @@ message Response {
     oneof response_type {
         ErrorResponse error = 1;
         PerfResponse perf = 2;
+        SettingsResponse settings = 3;
     }
 }

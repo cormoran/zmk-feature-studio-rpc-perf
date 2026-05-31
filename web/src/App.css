@@ -310,6 +310,38 @@ body {
   margin: 0;
 }
 
+.target-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.target-option {
+  border: 0;
+  border-right: 1px solid #ddd;
+  background: #fff;
+  color: #333;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+}
+
+.target-option:last-child {
+  border-right: 0;
+}
+
+.target-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.target-active {
+  background: #2f6fed;
+  color: white;
+  font-weight: 600;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -352,6 +384,46 @@ body {
 
 .graph-section {
   margin-top: 1.5rem;
+}
+
+.limits-section {
+  margin-top: 1.5rem;
+}
+
+.limits-section h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.limits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.6rem;
+}
+
+.limit-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 42px;
+  padding: 0.65rem 0.75rem;
+  background: #f6f8fb;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.limit-label {
+  color: #666;
+  font-size: 0.82rem;
+}
+
+.limit-value {
+  color: #333;
+  font-family: monospace;
+  font-size: 0.86rem;
+  white-space: nowrap;
 }
 
 .graph-section h3 {
@@ -514,6 +586,23 @@ body {
 
   .graph-section h3 {
     color: #aaa;
+  }
+
+  .limits-section h3 {
+    color: #aaa;
+  }
+
+  .limit-item {
+    background: #333;
+    border-color: #555;
+  }
+
+  .limit-label {
+    color: #aaa;
+  }
+
+  .limit-value {
+    color: #fff;
   }
 
   .graph-empty {

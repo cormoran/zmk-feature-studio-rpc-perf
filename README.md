@@ -1,5 +1,7 @@
 # zmk-feature-studio-rpc-perf
 
+![ZMK Version](https://img.shields.io/badge/ZMK-master-blue)
+
 A ZMK module that measures the performance of the ZMK Studio custom RPC protocol.
 
 https://cormoran.github.io/zmk-feature-studio-rpc-perf/
@@ -10,7 +12,10 @@ https://cormoran.github.io/zmk-feature-studio-rpc-perf/
 ## Features
 
 - **Adjustable payload sizes** – set both the request data size and the response data size bytes
+- **Device limit display** – shows the firmware RPC buffer and split relay payload settings used
+  to choose safe request/response sizes
 - **Adjustable send frequency** – configurable interval (ms) between successive requests
+- **Local or split target** – run the same test on the Studio central or through ZMK split relay events
 - **Live statistics** displayed in the web UI:
   - Ping latency (current / min / max in ms)
   - Throughput (bits per second, computed over a 3-second sliding window)
@@ -35,7 +40,7 @@ manifest:
     # Required for unofficial studio custom RPC feature
     - name: zmk
       remote: cormoran
-      revision: v0.3+custom-studio-protocol
+      revision: main+custom-studio-protocol
       import:
         file: app/west.yml
 ```
@@ -47,6 +52,24 @@ CONFIG_ZMK_STUDIO=y
 CONFIG_ZMK_STUDIO_RPC_PERF=y
 CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
 ```
+
+For BLE split testing, enable the module on both halves. The Studio-connected central also needs
+`CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y`; the peripheral only needs `CONFIG_ZMK_STUDIO_RPC_PERF=y`.
+The split path uses typed ZMK relay events, so enable the perf split RPC relay config. Increase
+the relay event payload size if you need larger split request or response payloads.
+
+```conf
+CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
+# Optionally increase below settings
+# CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN=256
+```
+
+The web UI reads the firmware's Studio RPC and split relay limits with a small settings RPC. If
+large local requests fail to decode, increase `CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE` or
+`CONFIG_ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_REQUEST_PAYLOAD_MAX_BYTES`. If large local responses do not
+fit the transport, increase `CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE`. For split tests, the effective
+request and response size is also capped by `CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN` minus the perf
+relay event header.
 
 ### 3. Open the web UI
 

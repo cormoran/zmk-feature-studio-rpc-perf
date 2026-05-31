@@ -42,3 +42,7 @@
 		>;
 	};
 };
+
+&board_cdc_acm_uart {
+	status = "disabled";
+};
