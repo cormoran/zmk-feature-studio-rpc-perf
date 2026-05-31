@@ -8,7 +8,7 @@ manifest:
   projects:
     - name: zmk-module-ble-management
       remote: cormoran
-      revision: migrate-to-v4
+      revision: main
     - name: zmk
       remote: cormoran
       revision: main+custom-studio-protocol
