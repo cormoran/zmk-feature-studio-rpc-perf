@@ -6,6 +6,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setupZMKMocks } from "@cormoran/zmk-studio-react-hook/testing";
 import App from "../src/App";
+import { Response } from "../src/proto/zmk/perf/perf";
 
 // Mock the ZMK client
 jest.mock("@zmkfirmware/zmk-studio-ts-client", () => ({
@@ -22,6 +23,22 @@ jest.mock("@zmkfirmware/zmk-studio-ts-client/transport/gatt", () => ({
 }));
 
 describe("App Component", () => {
+  const settingsPayload = Response.encode(
+    Response.create({
+      settings: {
+        studioRpcRxBufSize: 512,
+        studioRpcTxBufSize: 1024,
+        customSubsystemRequestPayloadMaxBytes: 512,
+        splitRelayEnabled: true,
+        splitRelayEventDataLen: 128,
+        perfRequestDataMaxBytes: 2048,
+        perfResponseDataMaxBytes: 2048,
+        splitRelayRequestDataMaxBytes: 119,
+        splitRelayResponseDataMaxBytes: 121,
+      },
+    })
+  ).finish();
+
   describe("Basic Rendering", () => {
     it("should render the application header", () => {
       render(<App />);
@@ -58,6 +75,9 @@ describe("App Component", () => {
       mocks.mockSuccessfulConnection({
         deviceName: "Test Keyboard",
         subsystems: ["zmk__perf"],
+      });
+      mocks.call_rpc.mockResolvedValue({
+        custom: { call: { payload: settingsPayload } },
       });
 
       const { connect: serial_connect } =

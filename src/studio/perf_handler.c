@@ -259,6 +259,30 @@ ZMK_SUBSCRIPTION(perf_split_relay_request, zmk_perf_split_relay_request);
 
 static zmk_perf_Request perf_request_decode_buffer;
 
+static int handle_settings_request(zmk_perf_Response *resp) {
+    resp->which_response_type = zmk_perf_Response_settings_tag;
+    zmk_perf_SettingsResponse *settings = &resp->response_type.settings;
+    *settings = (zmk_perf_SettingsResponse)zmk_perf_SettingsResponse_init_zero;
+
+    settings->studio_rpc_rx_buf_size = CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE;
+    settings->studio_rpc_tx_buf_size = CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE;
+    settings->custom_subsystem_request_payload_max_bytes =
+        CONFIG_ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_REQUEST_PAYLOAD_MAX_BYTES;
+    settings->perf_request_data_max_bytes = PERF_MAX_DATA_SIZE;
+    settings->perf_response_data_max_bytes = PERF_MAX_DATA_SIZE;
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_RELAY_EVENT)
+    settings->split_relay_enabled = true;
+    settings->split_relay_event_data_len = CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN;
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY)
+    settings->split_relay_request_data_max_bytes = PERF_SPLIT_RELAY_REQUEST_DATA_SIZE;
+    settings->split_relay_response_data_max_bytes = PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE;
+#endif
+#endif
+
+    return 0;
+}
+
 static int handle_perf_request(const zmk_perf_PerfRequest *req, zmk_perf_Response *resp) {
     LOG_DBG("Received perf request: seq=%u response_size=%u request_data_len=%zu split=%d",
             req->sequence_number, req->response_size, req->data.size, req->split);
@@ -324,6 +348,9 @@ static bool perf_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
     switch (perf_request_decode_buffer.which_request_type) {
     case zmk_perf_Request_perf_tag:
         ret = handle_perf_request(&perf_request_decode_buffer.request_type.perf, resp);
+        break;
+    case zmk_perf_Request_settings_tag:
+        ret = handle_settings_request(resp);
         break;
     default:
         LOG_WRN("Unsupported perf request type: %d", perf_request_decode_buffer.which_request_type);

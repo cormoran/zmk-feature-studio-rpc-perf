@@ -14,7 +14,11 @@ import {
   ZMKCustomSubsystem,
   ZMKAppContext,
 } from "@cormoran/zmk-studio-react-hook";
-import { Request, Response } from "./proto/zmk/perf/perf";
+import {
+  Request,
+  Response,
+  type SettingsResponse,
+} from "./proto/zmk/perf/perf";
 import {
   LineChart,
   Line,
@@ -116,8 +120,8 @@ function StepInput({
             key={p}
             type="button"
             className={`preset-btn${value === p ? " preset-active" : ""}`}
-            disabled={disabled}
-            onClick={() => onChange(p)}
+            disabled={disabled || p > max}
+            onClick={() => onChange(clamp(p))}
           >
             {p}
           </button>
@@ -129,6 +133,7 @@ function StepInput({
 
 const THROUGHPUT_WINDOW_MS = 3000;
 const LATENCY_HISTORY_MS = 60_000;
+const DEFAULT_DATA_SIZE_MAX = 2048;
 
 interface LatencyPoint {
   elapsedS: number;
@@ -160,6 +165,68 @@ const INITIAL_STATS: PerfStats = {
   rps: 0,
   lossRate: 0,
 };
+
+function formatBytes(value: number | undefined): string {
+  if (value === undefined || value === 0) return "—";
+  if (value >= 1024) return `${value} B (${(value / 1024).toFixed(1)} KiB)`;
+  return `${value} B`;
+}
+
+function encodedPerfRequestLength(
+  dataSize: number,
+  responseSize: number,
+  split: boolean
+): number {
+  return Request.encode(
+    Request.create({
+      perf: {
+        sequenceNumber: 1,
+        responseSize,
+        data: new Uint8Array(dataSize),
+        split,
+      },
+    })
+  ).finish().length;
+}
+
+function requestSizeMax(
+  settings: SettingsResponse | null,
+  responseSize: number,
+  split: boolean
+) {
+  if (!settings) return DEFAULT_DATA_SIZE_MAX;
+
+  let max = settings.perfRequestDataMaxBytes || DEFAULT_DATA_SIZE_MAX;
+  if (split && settings.splitRelayRequestDataMaxBytes > 0) {
+    max = Math.min(max, settings.splitRelayRequestDataMaxBytes);
+  }
+
+  const payloadMax = settings.customSubsystemRequestPayloadMaxBytes;
+  if (payloadMax === 0) return max;
+
+  let lo = 0;
+  let hi = max;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (encodedPerfRequestLength(mid, responseSize, split) <= payloadMax) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return lo;
+}
+
+function responseSizeMax(settings: SettingsResponse | null, split: boolean) {
+  if (!settings) return DEFAULT_DATA_SIZE_MAX;
+
+  let max = settings.perfResponseDataMaxBytes || DEFAULT_DATA_SIZE_MAX;
+  if (split && settings.splitRelayResponseDataMaxBytes > 0) {
+    max = Math.min(max, settings.splitRelayResponseDataMaxBytes);
+  }
+  return max;
+}
 
 function App() {
   return (
@@ -319,6 +386,8 @@ export function PerfSection() {
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState<PerfStats>(INITIAL_STATS);
   const [latencyHistory, setLatencyHistory] = useState<LatencyPoint[]>([]);
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const seqRef = useRef(0);
   const statsRef = useRef({ ...INITIAL_STATS });
@@ -328,6 +397,15 @@ export function PerfSection() {
   const isRunningRef = useRef(false);
   const serviceRef = useRef<ZMKCustomSubsystem | null>(null);
 
+  const maxResponseSize = responseSizeMax(settings, useSplit);
+  const effectiveResponseSize = Math.min(responseSize, maxResponseSize);
+  const maxRequestSize = requestSizeMax(
+    settings,
+    effectiveResponseSize,
+    useSplit
+  );
+  const effectiveRequestSize = Math.min(requestSize, maxRequestSize);
+
   const updateStats = useCallback(() => {
     setStats({ ...statsRef.current });
     setLatencyHistory([...latencyHistoryRef.current]);
@@ -336,6 +414,30 @@ export function PerfSection() {
   const stop = useCallback(() => {
     isRunningRef.current = false;
     setIsRunning(false);
+  }, []);
+
+  const loadSettings = useCallback(async (service: ZMKCustomSubsystem) => {
+    try {
+      const payload = Request.encode(Request.create({ settings: {} })).finish();
+      const raw = await service.callRPC(payload);
+      if (!raw) {
+        setSettingsError("No settings response");
+        return;
+      }
+
+      const resp = Response.decode(raw);
+      if (resp.settings) {
+        setSettings(resp.settings);
+      } else if (resp.error) {
+        setSettingsError(resp.error.message || "Settings request failed");
+      } else {
+        setSettingsError("Unexpected settings response");
+      }
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : "Settings request failed"
+      );
+    }
   }, []);
 
   const start = useCallback(() => {
@@ -357,10 +459,15 @@ export function PerfSection() {
         const seq = ++seqRef.current;
         const sentAt = performance.now();
 
-        const data = new Uint8Array(requestSize).fill(0x55);
+        const data = new Uint8Array(effectiveRequestSize).fill(0x55);
         const payload = Request.encode(
           Request.create({
-            perf: { sequenceNumber: seq, responseSize, data, split: useSplit },
+            perf: {
+              sequenceNumber: seq,
+              responseSize: effectiveResponseSize,
+              data,
+              split: useSplit,
+            },
           })
         ).finish();
 
@@ -460,7 +567,14 @@ export function PerfSection() {
     };
 
     runLoop();
-  }, [zmkApp, requestSize, responseSize, intervalMs, useSplit, updateStats]);
+  }, [
+    zmkApp,
+    effectiveRequestSize,
+    effectiveResponseSize,
+    intervalMs,
+    useSplit,
+    updateStats,
+  ]);
 
   // Keep serviceRef in sync when the connection changes
   useEffect(() => {
@@ -470,11 +584,16 @@ export function PerfSection() {
       serviceRef.current = null;
       return;
     }
-    serviceRef.current = new ZMKCustomSubsystem(
+    const service = new ZMKCustomSubsystem(
       zmkApp.state.connection,
       subsystem.index
     );
-  }, [zmkApp]);
+    serviceRef.current = service;
+    const timeoutId = window.setTimeout(() => {
+      loadSettings(service);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [zmkApp, loadSettings]);
 
   // Stop on unmount
   useEffect(() => () => stop(), [stop]);
@@ -531,9 +650,9 @@ export function PerfSection() {
           <label htmlFor="req-size">Request size (bytes):</label>
           <StepInput
             id="req-size"
-            value={requestSize}
+            value={effectiveRequestSize}
             min={0}
-            max={2048}
+            max={maxRequestSize}
             smallStep={1}
             largeStep={32}
             presets={[0, 32, 64, 128, 256, 512, 1024, 2048]}
@@ -546,9 +665,9 @@ export function PerfSection() {
           <label htmlFor="resp-size">Response size (bytes):</label>
           <StepInput
             id="resp-size"
-            value={responseSize}
+            value={effectiveResponseSize}
             min={0}
-            max={2048}
+            max={maxResponseSize}
             smallStep={1}
             largeStep={32}
             presets={[0, 32, 64, 128, 256, 512, 1024, 2048]}
@@ -596,6 +715,63 @@ export function PerfSection() {
         >
           🔄 Reset
         </button>
+      </div>
+
+      <div className="limits-section">
+        <h3>Device Limits</h3>
+        {settingsError && <div className="stat-sub">{settingsError}</div>}
+        <div className="limits-grid">
+          <div className="limit-item">
+            <span className="limit-label">RPC RX buffer</span>
+            <span className="limit-value">
+              {formatBytes(settings?.studioRpcRxBufSize)}
+            </span>
+          </div>
+          <div className="limit-item">
+            <span className="limit-label">RPC TX buffer</span>
+            <span className="limit-value">
+              {formatBytes(settings?.studioRpcTxBufSize)}
+            </span>
+          </div>
+          <div className="limit-item">
+            <span className="limit-label">Custom request payload</span>
+            <span className="limit-value">
+              {formatBytes(settings?.customSubsystemRequestPayloadMaxBytes)}
+            </span>
+          </div>
+          <div className="limit-item">
+            <span className="limit-label">Perf request data</span>
+            <span className="limit-value">
+              {formatBytes(settings?.perfRequestDataMaxBytes)}
+            </span>
+          </div>
+          <div className="limit-item">
+            <span className="limit-label">Perf response data</span>
+            <span className="limit-value">
+              {formatBytes(settings?.perfResponseDataMaxBytes)}
+            </span>
+          </div>
+          <div className="limit-item">
+            <span className="limit-label">Split relay payload</span>
+            <span className="limit-value">
+              {settings?.splitRelayEnabled
+                ? formatBytes(settings.splitRelayEventDataLen)
+                : "disabled"}
+            </span>
+          </div>
+          <div className="limit-item">
+            <span className="limit-label">Split request data</span>
+            <span className="limit-value">
+              {formatBytes(settings?.splitRelayRequestDataMaxBytes)}
+            </span>
+          </div>
+          <div className="limit-item">
+            <span className="limit-label">Split response data</span>
+            <span className="limit-value">
+              {formatBytes(settings?.splitRelayResponseDataMaxBytes)}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="graph-section">

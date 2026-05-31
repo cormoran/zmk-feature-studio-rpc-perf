@@ -12,6 +12,8 @@ https://cormoran.github.io/zmk-feature-studio-rpc-perf/
 ## Features
 
 - **Adjustable payload sizes** – set both the request data size and the response data size bytes
+- **Device limit display** – shows the firmware RPC buffer and split relay payload settings used
+  to choose safe request/response sizes
 - **Adjustable send frequency** – configurable interval (ms) between successive requests
 - **Local or split target** – run the same test on the Studio central or through ZMK split relay events
 - **Live statistics** displayed in the web UI:
@@ -61,6 +63,13 @@ CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
 # Optionally increase below settings
 # CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN=256
 ```
+
+The web UI reads the firmware's Studio RPC and split relay limits with a small settings RPC. If
+large local requests fail to decode, increase `CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE` or
+`CONFIG_ZMK_STUDIO_RPC_CUSTOM_SUBSYSTEM_REQUEST_PAYLOAD_MAX_BYTES`. If large local responses do not
+fit the transport, increase `CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE`. For split tests, the effective
+request and response size is also capped by `CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN` minus the perf
+relay event header.
 
 ### 3. Open the web UI
 

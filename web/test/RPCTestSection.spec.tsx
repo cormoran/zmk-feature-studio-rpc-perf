@@ -2,16 +2,45 @@
  * Tests for PerfSection component
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import {
   createConnectedMockZMKApp,
   ZMKAppProvider,
 } from "@cormoran/zmk-studio-react-hook/testing";
 import { PerfSection, SUBSYSTEM_IDENTIFIER } from "../src/App";
+import { Response } from "../src/proto/zmk/perf/perf";
+
+jest.mock("@zmkfirmware/zmk-studio-ts-client", () => ({
+  call_rpc: jest.fn(),
+}));
+
+const settingsPayload = Response.encode(
+  Response.create({
+    settings: {
+      studioRpcRxBufSize: 512,
+      studioRpcTxBufSize: 1024,
+      customSubsystemRequestPayloadMaxBytes: 512,
+      splitRelayEnabled: true,
+      splitRelayEventDataLen: 128,
+      perfRequestDataMaxBytes: 2048,
+      perfResponseDataMaxBytes: 2048,
+      splitRelayRequestDataMaxBytes: 119,
+      splitRelayResponseDataMaxBytes: 121,
+    },
+  })
+).finish();
 
 describe("PerfSection Component", () => {
+  beforeEach(async () => {
+    const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
+    (call_rpc as jest.Mock).mockReset();
+    (call_rpc as jest.Mock).mockResolvedValue({
+      custom: { call: { payload: settingsPayload } },
+    });
+  });
+
   describe("With Subsystem", () => {
-    it("should render performance controls when subsystem is found", () => {
+    it("should render performance controls when subsystem is found", async () => {
       const mockZMKApp = createConnectedMockZMKApp({
         deviceName: "Test Device",
         subsystems: [SUBSYSTEM_IDENTIFIER],
@@ -32,9 +61,12 @@ describe("PerfSection Component", () => {
       expect(
         screen.getByRole("button", { name: /Start/i })
       ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(/Device Limits/i)).toBeInTheDocument();
+      });
     });
 
-    it("should show default input values", () => {
+    it("should show default input values", async () => {
       const mockZMKApp = createConnectedMockZMKApp({
         subsystems: [SUBSYSTEM_IDENTIFIER],
       });
@@ -57,9 +89,12 @@ describe("PerfSection Component", () => {
       expect(reqInput.value).toBe("1");
       expect(respInput.value).toBe("1");
       expect(intInput.value).toBe("100");
+      await waitFor(() => {
+        expect(screen.getByText(/Device Limits/i)).toBeInTheDocument();
+      });
     });
 
-    it("should display initial stat placeholders", () => {
+    it("should display initial stat placeholders", async () => {
       const mockZMKApp = createConnectedMockZMKApp({
         subsystems: [SUBSYSTEM_IDENTIFIER],
       });
@@ -73,6 +108,28 @@ describe("PerfSection Component", () => {
       expect(screen.getByText(/Last latency/i)).toBeInTheDocument();
       expect(screen.getByText(/Throughput/i)).toBeInTheDocument();
       expect(screen.getByText(/Packet loss/i)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(/Device Limits/i)).toBeInTheDocument();
+      });
+    });
+
+    it("should display firmware RPC limits", async () => {
+      const mockZMKApp = createConnectedMockZMKApp({
+        subsystems: [SUBSYSTEM_IDENTIFIER],
+      });
+
+      render(
+        <ZMKAppProvider value={mockZMKApp}>
+          <PerfSection />
+        </ZMKAppProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/RPC RX buffer/i)).toBeInTheDocument();
+        expect(screen.getAllByText("512 B").length).toBeGreaterThan(0);
+        expect(screen.getByText(/Split relay payload/i)).toBeInTheDocument();
+        expect(screen.getByText("128 B")).toBeInTheDocument();
+      });
     });
   });
 
