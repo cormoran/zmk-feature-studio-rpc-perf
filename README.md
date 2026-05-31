@@ -1,5 +1,7 @@
 # zmk-feature-studio-rpc-perf
 
+![ZMK Version](https://img.shields.io/badge/ZMK-master-blue)
+
 A ZMK module that measures the performance of the ZMK Studio custom RPC protocol.
 
 https://cormoran.github.io/zmk-feature-studio-rpc-perf/
@@ -35,7 +37,7 @@ manifest:
     # Required for unofficial studio custom RPC feature
     - name: zmk
       remote: cormoran
-      revision: v0.3+custom-studio-protocol
+      revision: main+custom-studio-protocol
       import:
         file: app/west.yml
 ```
