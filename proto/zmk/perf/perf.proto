@@ -7,12 +7,15 @@ message PerfRequest {
     uint32 sequence_number = 1;
     uint32 response_size = 2; // bytes the device should include in the response
     bytes data = 3;           // request payload padding
+    bool split = 4;           // route through split relay events
 }
 
 // Sent from the device back to the web UI
 message PerfResponse {
     uint32 sequence_number = 1; // echoed from request
     bytes data = 2;             // response payload
+    bool split = 3;             // true when the response came via split relay events
+    uint32 source = 4;          // split peripheral source id, when split is true
 }
 
 message Request {

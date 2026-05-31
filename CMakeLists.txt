@@ -3,10 +3,10 @@
 # Include directories
 zephyr_include_directories(include)
 if(CONFIG_ZMK_STUDIO_RPC_PERF)
-    if(CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER)
-        file(GLOB_RECURSE C_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
-        target_sources(app PRIVATE ${C_FILES})
+    file(GLOB_RECURSE C_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
+    target_sources(app PRIVATE ${C_FILES})
 
+    if(CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER)
         list(APPEND CMAKE_MODULE_PATH ${ZEPHYR_BASE}/modules/nanopb)
         include(nanopb)
         set(NANOPB_GENERATE_CPP_APPEND_PATH TRUE)

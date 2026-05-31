@@ -13,6 +13,7 @@ https://cormoran.github.io/zmk-feature-studio-rpc-perf/
 
 - **Adjustable payload sizes** – set both the request data size and the response data size bytes
 - **Adjustable send frequency** – configurable interval (ms) between successive requests
+- **Local or split target** – run the same test on the Studio central or through ZMK split relay events
 - **Live statistics** displayed in the web UI:
   - Ping latency (current / min / max in ms)
   - Throughput (bits per second, computed over a 3-second sliding window)
@@ -48,6 +49,15 @@ manifest:
 CONFIG_ZMK_STUDIO=y
 CONFIG_ZMK_STUDIO_RPC_PERF=y
 CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+```
+
+For BLE split testing, enable the module on both halves. The Studio-connected central also needs
+`CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y`; the peripheral only needs `CONFIG_ZMK_STUDIO_RPC_PERF=y`.
+The module enables ZMK split relay events when `CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT=y`.
+
+```conf
+CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT=y
+CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_TIMEOUT_MS=10000
 ```
 
 ### 3. Open the web UI

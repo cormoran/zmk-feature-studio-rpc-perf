@@ -264,8 +264,11 @@ function LatencyGraph({
           domain={["auto", "auto"]}
         />
         <Tooltip
-          formatter={(val) => [`${Number(val).toFixed(1)} ms`, "Latency"]}
-          labelFormatter={(v) => `${Number(v).toFixed(1)}s`}
+          formatter={(val: unknown) => [
+            `${Number(val).toFixed(1)} ms`,
+            "Latency",
+          ]}
+          labelFormatter={(v: unknown) => `${Number(v).toFixed(1)}s`}
         />
         <Line
           type="monotone"
@@ -312,6 +315,7 @@ export function PerfSection() {
   const [requestSize, setRequestSize] = useState(1);
   const [responseSize, setResponseSize] = useState(1);
   const [intervalMs, setIntervalMs] = useState(100);
+  const [useSplit, setUseSplit] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState<PerfStats>(INITIAL_STATS);
   const [latencyHistory, setLatencyHistory] = useState<LatencyPoint[]>([]);
@@ -355,7 +359,9 @@ export function PerfSection() {
 
         const data = new Uint8Array(requestSize).fill(0x55);
         const payload = Request.encode(
-          Request.create({ perf: { sequenceNumber: seq, responseSize, data } })
+          Request.create({
+            perf: { sequenceNumber: seq, responseSize, data, split: useSplit },
+          })
         ).finish();
 
         statsRef.current.sent += 1;
@@ -454,7 +460,7 @@ export function PerfSection() {
     };
 
     runLoop();
-  }, [zmkApp, requestSize, responseSize, intervalMs, updateStats]);
+  }, [zmkApp, requestSize, responseSize, intervalMs, useSplit, updateStats]);
 
   // Keep serviceRef in sync when the connection changes
   useEffect(() => {
@@ -497,6 +503,30 @@ export function PerfSection() {
       <h2>⚡ Performance Test</h2>
 
       <div className="perf-controls">
+        <div className="input-group">
+          <label htmlFor="target-split">Target:</label>
+          <div className="target-toggle">
+            <button
+              id="target-local"
+              type="button"
+              className={`target-option${!useSplit ? " target-active" : ""}`}
+              disabled={isRunning}
+              onClick={() => setUseSplit(false)}
+            >
+              Local
+            </button>
+            <button
+              id="target-split"
+              type="button"
+              className={`target-option${useSplit ? " target-active" : ""}`}
+              disabled={isRunning}
+              onClick={() => setUseSplit(true)}
+            >
+              Split
+            </button>
+          </div>
+        </div>
+
         <div className="input-group">
           <label htmlFor="req-size">Request size (bytes):</label>
           <StepInput
