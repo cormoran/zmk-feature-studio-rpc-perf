@@ -23,6 +23,10 @@ https://cormoran.github.io/zmk-feature-studio-rpc-perf/
 - **Structured error reporting** – firmware-side failures (unsupported split
   relay, a busy or timed-out split request, oversized payloads, ...) surface
   as a specific message in the web UI instead of just extra packet loss
+- **Benchmark sweep mode** – run a fixed number of requests across a range of
+  payload sizes (request size, response size, or both) unattended, then
+  compare latency/throughput/loss per size in a table and chart, and export
+  the results as CSV or JSON
 - **USB and BLE connection** – the web UI supports both USB serial and BLE (GATT)
 
 ## Setup

@@ -166,7 +166,8 @@ body {
   margin: 1rem 0;
 }
 
-.input-group label {
+.input-group label,
+.input-group-label {
   font-weight: 500;
   font-size: 0.9rem;
 }
@@ -442,6 +443,53 @@ body {
   color: #888;
   font-size: 0.9rem;
   border: 1px dashed #ccc;
+}
+
+.dimension-toggle {
+  grid-template-columns: repeat(3, minmax(96px, 1fr));
+}
+
+.sweep-panel {
+  margin-bottom: 1rem;
+}
+
+.size-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.35rem;
+}
+
+.size-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.sweep-table-wrapper {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.sweep-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.sweep-table th,
+.sweep-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: right;
+  border-bottom: 1px solid #e2e2e2;
+  white-space: nowrap;
+}
+
+.sweep-table th:first-child,
+.sweep-table td:first-child {
+  text-align: left;
 }
 
 /* Tablet: collapse to 1-column controls (step-row needs ~280px minimum) */
