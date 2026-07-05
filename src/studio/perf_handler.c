@@ -315,7 +315,8 @@ static int handle_perf_request(const zmk_perf_PerfRequest *req, zmk_perf_Respons
 }
 
 static struct zmk_rpc_custom_subsystem_meta perf_feature_meta = {
-    ZMK_RPC_CUSTOM_SUBSYSTEM_UI_URLS("http://localhost:5173"),
+    ZMK_RPC_CUSTOM_SUBSYSTEM_UI_URLS("https://cormoran.github.io/zmk-feature-studio-rpc-perf/",
+                                     "http://localhost:5173"),
     .security = ZMK_STUDIO_RPC_HANDLER_UNSECURED,
 };
 
