@@ -85,7 +85,7 @@ export function SweepPanel({
     <div className="sweep-panel">
       <div className="perf-controls">
         <div className="input-group">
-          <label htmlFor="sweep-dimension">Sweep dimension:</label>
+          <span className="input-group-label">Sweep dimension:</span>
           <div className="target-toggle dimension-toggle">
             {(Object.keys(DIMENSION_LABELS) as SweepDimension[]).map((d) => (
               <button
@@ -103,7 +103,7 @@ export function SweepPanel({
         </div>
 
         <div className="input-group">
-          <label htmlFor="sweep-target-split">Target:</label>
+          <span className="input-group-label">Target:</span>
           <div className="target-toggle">
             <button
               id="sweep-target-local"

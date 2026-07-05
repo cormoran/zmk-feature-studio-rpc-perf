@@ -187,7 +187,9 @@ describe("PerfSection Component", () => {
       jest.useRealTimers();
     });
 
-    async function renderAndStart(options: { intervalMs?: number } = {}) {
+    async function renderAndStart(
+      options: { intervalMs?: number; windowSize?: number } = {}
+    ) {
       const mockZMKApp = createConnectedMockZMKApp({
         subsystems: [SUBSYSTEM_IDENTIFIER],
       });
@@ -208,6 +210,12 @@ describe("PerfSection Component", () => {
         // so sent/received counts from a single request stay observable.
         fireEvent.change(screen.getByLabelText(/Interval between requests/i), {
           target: { value: String(options.intervalMs) },
+        });
+      }
+
+      if (options.windowSize !== undefined) {
+        fireEvent.change(screen.getByLabelText(/Max in-flight requests/i), {
+          target: { value: String(options.windowSize) },
         });
       }
 
@@ -326,6 +334,82 @@ describe("PerfSection Component", () => {
       expect(screen.getByText("0 / 1 packets, errors 1")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /Stop/i }));
+    });
+
+    it("window=1 sends exactly one request at a time (regression-safe default)", async () => {
+      const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
+      (call_rpc as jest.Mock).mockReset();
+      (call_rpc as jest.Mock)
+        .mockResolvedValueOnce({
+          custom: { call: { payload: settingsPayload } },
+        })
+        .mockImplementation(() => new Promise(() => {})); // perf calls hang
+
+      await renderAndStart({ intervalMs: 0 });
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      // Only the settings call plus a single in-flight perf request.
+      expect(call_rpc).toHaveBeenCalledTimes(2);
+
+      fireEvent.click(screen.getByRole("button", { name: /Stop/i }));
+    });
+
+    it("window > 1 keeps multiple requests in flight at once", async () => {
+      const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
+      (call_rpc as jest.Mock).mockReset();
+      (call_rpc as jest.Mock)
+        .mockResolvedValueOnce({
+          custom: { call: { payload: settingsPayload } },
+        })
+        .mockImplementation(() => new Promise(() => {})); // perf calls hang
+
+      await renderAndStart({ intervalMs: 0, windowSize: 4 });
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      // Settings call plus 4 concurrently in-flight perf requests — all 4
+      // workers issued their first request without waiting on each other.
+      expect(call_rpc).toHaveBeenCalledTimes(5);
+
+      fireEvent.click(screen.getByRole("button", { name: /Stop/i }));
+    });
+
+    it("forces the window to 1 for the Split target", async () => {
+      const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
+      (call_rpc as jest.Mock).mockReset();
+      (call_rpc as jest.Mock).mockResolvedValue({
+        custom: { call: { payload: settingsPayload } },
+      });
+
+      const mockZMKApp = createConnectedMockZMKApp({
+        subsystems: [SUBSYSTEM_IDENTIFIER],
+      });
+      render(
+        <ZMKAppProvider value={mockZMKApp}>
+          <PerfSection />
+        </ZMKAppProvider>
+      );
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      // Pick a window size > 1 while still on the (default) Local target.
+      fireEvent.change(screen.getByLabelText(/Max in-flight requests/i), {
+        target: { value: "8" },
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Split" }));
+
+      const windowInput = screen.getByLabelText(
+        /Max in-flight requests/i
+      ) as HTMLInputElement;
+      expect(windowInput.value).toBe("1");
+      expect(windowInput.disabled).toBe(true);
     });
   });
 

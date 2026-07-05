@@ -154,6 +154,8 @@ export function PerfSection() {
             setResponseSize={perf.setResponseSize}
             intervalMs={perf.intervalMs}
             setIntervalMs={perf.setIntervalMs}
+            effectiveWindowSize={perf.effectiveWindowSize}
+            setWindowSize={perf.setWindowSize}
           />
 
           <div className="button-group">

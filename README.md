@@ -15,6 +15,11 @@ https://cormoran.github.io/zmk-feature-studio-rpc-perf/
 - **Device limit display** – shows the firmware RPC buffer and split relay payload settings used
   to choose safe request/response sizes
 - **Adjustable send frequency** – configurable interval (ms) between successive requests
+- **Pipelined requests** – keep up to 16 requests in flight at once (instead
+  of waiting for each response before sending the next) to measure
+  throughput beyond what a single round trip allows; forced to 1 for the
+  split target, since the firmware only tracks one outstanding split
+  request at a time
 - **Local or split target** – run the same test on the Studio central or through ZMK split relay events
 - **Live statistics** displayed in the web UI:
   - Ping latency (current / min / max in ms)
