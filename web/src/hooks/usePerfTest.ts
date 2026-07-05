@@ -8,6 +8,7 @@ import type { SettingsResponse } from "../proto/zmk/perf/perf";
 import { ZMKCustomSubsystem } from "@cormoran/zmk-studio-react-hook";
 import { requestSizeMax, responseSizeMax } from "../lib/frameSize";
 import { describeErrorCode } from "../lib/errorCode";
+import { sendPerfRequest } from "../lib/perfRequest";
 import type { LatencyPoint } from "../components/LatencyGraph";
 
 const THROUGHPUT_WINDOW_MS = 3000;
@@ -155,18 +156,6 @@ export function usePerfTest({
         const seq = ++seqRef.current;
         const sentAt = performance.now();
 
-        const data = new Uint8Array(effectiveRequestSize).fill(0x55);
-        const payload = Request.encode(
-          Request.create({
-            perf: {
-              sequenceNumber: seq,
-              responseSize: effectiveResponseSize,
-              data,
-              split: useSplit,
-            },
-          })
-        ).finish();
-
         statsRef.current.sent += 1;
 
         const recordLoss = () => {
@@ -255,35 +244,26 @@ export function usePerfTest({
           recordLoss();
         };
 
-        try {
-          // Await response before sending next request — avoids firmware mutex contention.
-          // A per-request timeout keeps a single dropped response from stalling
-          // the loop forever; any response that arrives after the timeout is
-          // simply left unawaited (the client library matches by request id,
-          // so it cannot be mistaken for the next request's response).
-          const raw = await service.callRPC(payload, {
-            timeout: RPC_TIMEOUT_MS,
-          });
-          if (raw) {
-            const resp = Response.decode(raw);
-            if (resp.perf && resp.perf.sequenceNumber === seq) {
-              recordSuccess(
-                performance.now() - sentAt,
-                payload.length + raw.length
-              );
-            } else if (resp.error) {
-              recordError(resp.error.code, resp.error.message);
-            } else {
-              // Wrong/missing sequence number (or a stray settings reply):
-              // don't trust it as a latency sample.
-              recordLoss();
-            }
-          } else {
+        // Await the outcome before sending next request — avoids firmware
+        // mutex contention. See lib/perfRequest.ts for timeout/error/seq
+        // handling shared with the benchmark sweep.
+        const outcome = await sendPerfRequest(service, {
+          sequenceNumber: seq,
+          requestSize: effectiveRequestSize,
+          responseSize: effectiveResponseSize,
+          split: useSplit,
+          timeoutMs: RPC_TIMEOUT_MS,
+        });
+        switch (outcome.kind) {
+          case "success":
+            recordSuccess(outcome.latencyMs, outcome.bytes);
+            break;
+          case "error":
+            recordError(outcome.code, outcome.message);
+            break;
+          case "loss":
             recordLoss();
-          }
-        } catch {
-          // Timeout or transport error: counts as a lost request.
-          recordLoss();
+            break;
         }
 
         const elapsed = performance.now() - sentAt;
