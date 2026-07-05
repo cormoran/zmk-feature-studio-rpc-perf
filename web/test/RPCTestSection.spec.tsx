@@ -2,7 +2,13 @@
  * Tests for PerfSection component
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import {
   createConnectedMockZMKApp,
   ZMKAppProvider,
@@ -13,6 +19,10 @@ import { Response } from "../src/proto/zmk/perf/perf";
 jest.mock("@zmkfirmware/zmk-studio-ts-client", () => ({
   call_rpc: jest.fn(),
 }));
+
+// Mirrors the constants in src/hooks/usePerfTest.ts.
+const RPC_TIMEOUT_MS = 15000;
+const STATS_FLUSH_INTERVAL_MS = 150;
 
 const settingsPayload = Response.encode(
   Response.create({
@@ -29,6 +39,14 @@ const settingsPayload = Response.encode(
     },
   })
 ).finish();
+
+function perfResponsePayload(sequenceNumber: number) {
+  return Response.encode(
+    Response.create({
+      perf: { sequenceNumber, data: new Uint8Array(0), split: false },
+    })
+  ).finish();
+}
 
 describe("PerfSection Component", () => {
   beforeEach(async () => {
@@ -151,6 +169,122 @@ describe("PerfSection Component", () => {
       expect(
         screen.getByText(/Subsystem "zmk__perf" not found/i)
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("Run loop robustness", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    async function renderAndStart(options: { intervalMs?: number } = {}) {
+      const mockZMKApp = createConnectedMockZMKApp({
+        subsystems: [SUBSYSTEM_IDENTIFIER],
+      });
+
+      render(
+        <ZMKAppProvider value={mockZMKApp}>
+          <PerfSection />
+        </ZMKAppProvider>
+      );
+
+      // Flush the loadSettings() setTimeout(0) scheduled on mount.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      if (options.intervalMs !== undefined) {
+        // Keep the next iteration from starting inside the assertion window,
+        // so sent/received counts from a single request stay observable.
+        fireEvent.change(screen.getByLabelText(/Interval between requests/i), {
+          target: { value: String(options.intervalMs) },
+        });
+      }
+
+      fireEvent.click(screen.getByRole("button", { name: /Start/i }));
+    }
+
+    it("counts a request that never responds as a loss without stalling the loop", async () => {
+      const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
+      (call_rpc as jest.Mock).mockReset();
+      (call_rpc as jest.Mock)
+        .mockResolvedValueOnce({
+          custom: { call: { payload: settingsPayload } },
+        })
+        .mockImplementation(() => new Promise(() => {}));
+
+      await renderAndStart();
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(
+          RPC_TIMEOUT_MS + STATS_FLUSH_INTERVAL_MS
+        );
+      });
+
+      expect(screen.getByText("100.0 %")).toBeInTheDocument();
+      // sent advanced to 2: the loop moved on to a second request after the
+      // first timed out, instead of hanging forever.
+      expect(screen.getByText("0 / 2 packets")).toBeInTheDocument();
+      expect(call_rpc).toHaveBeenCalledTimes(3);
+
+      expect(screen.getByRole("button", { name: /Stop/i })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Stop/i }));
+    });
+
+    it("updates the packet-loss stat immediately when a request fails", async () => {
+      const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
+      (call_rpc as jest.Mock).mockReset();
+      (call_rpc as jest.Mock)
+        .mockResolvedValueOnce({
+          custom: { call: { payload: settingsPayload } },
+        })
+        .mockRejectedValueOnce(new Error("transport error"))
+        .mockImplementation(() => new Promise(() => {}));
+
+      await renderAndStart({ intervalMs: 9999 });
+
+      // Only a flush tick is needed — no need to wait out the RPC timeout.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(STATS_FLUSH_INTERVAL_MS);
+      });
+
+      expect(screen.getByText("100.0 %")).toBeInTheDocument();
+      expect(screen.getByText("0 / 1 packets")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /Stop/i }));
+    });
+
+    it("does not record a latency sample when the response sequence number is wrong", async () => {
+      const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
+      (call_rpc as jest.Mock).mockReset();
+      (call_rpc as jest.Mock)
+        .mockResolvedValueOnce({
+          custom: { call: { payload: settingsPayload } },
+        })
+        .mockResolvedValueOnce({
+          custom: { call: { payload: perfResponsePayload(999) } },
+        })
+        .mockImplementation(() => new Promise(() => {}));
+
+      await renderAndStart({ intervalMs: 9999 });
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(STATS_FLUSH_INTERVAL_MS);
+      });
+
+      expect(screen.getByText("0 / 1 packets")).toBeInTheDocument();
+      expect(screen.getByText("100.0 %")).toBeInTheDocument();
+      // "Last latency" stat card still shows the empty placeholder.
+      const lastLatencyCard = screen
+        .getByText(/Last latency/i)
+        .closest(".stat-card") as HTMLElement;
+      expect(lastLatencyCard).toHaveTextContent("—");
+
+      fireEvent.click(screen.getByRole("button", { name: /Stop/i }));
     });
   });
 

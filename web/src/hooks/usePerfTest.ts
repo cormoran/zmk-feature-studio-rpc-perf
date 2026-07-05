@@ -15,6 +15,13 @@ const LATENCY_HISTORY_MS = 60_000;
 // instead of after every request — at interval 0 the loop can fire hundreds
 // of times per second, which would otherwise re-render the chart that often.
 const STATS_FLUSH_INTERVAL_MS = 150;
+// ZMKCustomSubsystem.callRPC() defaults to a 5000ms timeout, which is shorter
+// than the firmware's own split relay timeout
+// (CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_TIMEOUT_MS, default 10000ms — see
+// Kconfig). Ask for a longer timeout so the firmware gets a chance to time
+// out a split relay request and answer with its own error first, instead of
+// the UI giving up on the round trip prematurely.
+const RPC_TIMEOUT_MS = 15000;
 
 export interface PerfStats {
   sent: number;
@@ -157,87 +164,108 @@ export function usePerfTest({
 
         statsRef.current.sent += 1;
 
+        const recordLoss = () => {
+          statsRef.current.lossRate =
+            statsRef.current.sent > 0
+              ? ((statsRef.current.sent - statsRef.current.received) /
+                  statsRef.current.sent) *
+                100
+              : 0;
+        };
+
+        const recordSuccess = (latency: number, transferredBytes: number) => {
+          const now = sentAt + latency;
+          statsRef.current.received += 1;
+
+          statsRef.current.latencyMs = latency;
+          statsRef.current.minLatencyMs =
+            statsRef.current.minLatencyMs === null
+              ? latency
+              : Math.min(statsRef.current.minLatencyMs, latency);
+          statsRef.current.maxLatencyMs =
+            statsRef.current.maxLatencyMs === null
+              ? latency
+              : Math.max(statsRef.current.maxLatencyMs, latency);
+
+          // Latency history (1 min sliding window)
+          const elapsedS = (now - testStartRef.current) / 1000;
+          latencyHistoryRef.current.push({ elapsedS, latencyMs: latency });
+          const historyCutoffS = elapsedS - LATENCY_HISTORY_MS / 1000;
+          latencyHistoryRef.current = latencyHistoryRef.current.filter(
+            (e) => e.elapsedS >= historyCutoffS
+          );
+
+          // Avg and median from history window
+          const windowLatencies = latencyHistoryRef.current.map(
+            (e) => e.latencyMs
+          );
+          const sum = windowLatencies.reduce((a, b) => a + b, 0);
+          statsRef.current.avgLatencyMs = sum / windowLatencies.length;
+          const sorted = [...windowLatencies].sort((a, b) => a - b);
+          const mid = Math.floor(sorted.length / 2);
+          statsRef.current.medianLatencyMs =
+            sorted.length % 2 === 0
+              ? (sorted[mid - 1] + sorted[mid]) / 2
+              : sorted[mid];
+
+          // RPS from history window
+          const hist = latencyHistoryRef.current;
+          const histDuration =
+            hist.length > 1
+              ? hist[hist.length - 1].elapsedS - hist[0].elapsedS
+              : 0;
+          statsRef.current.rps =
+            histDuration > 0 ? (hist.length - 1) / histDuration : 0;
+
+          // Throughput: 3s sliding window
+          bytesWindowRef.current.push({ ts: now, bytes: transferredBytes });
+          const cutoff = now - THROUGHPUT_WINDOW_MS;
+          bytesWindowRef.current = bytesWindowRef.current.filter(
+            (e) => e.ts >= cutoff
+          );
+          const windowBytes = bytesWindowRef.current.reduce(
+            (acc, e) => acc + e.bytes,
+            0
+          );
+          const windowDuration =
+            bytesWindowRef.current.length > 1
+              ? (bytesWindowRef.current[bytesWindowRef.current.length - 1].ts -
+                  bytesWindowRef.current[0].ts) /
+                1000
+              : 0;
+          statsRef.current.bitsPerSecond =
+            windowDuration > 0 ? (windowBytes * 8) / windowDuration : 0;
+
+          recordLoss();
+        };
+
         try {
           // Await response before sending next request — avoids firmware mutex contention.
-          const raw = await service.callRPC(payload);
+          // A per-request timeout keeps a single dropped response from stalling
+          // the loop forever; any response that arrives after the timeout is
+          // simply left unawaited (the client library matches by request id,
+          // so it cannot be mistaken for the next request's response).
+          const raw = await service.callRPC(payload, {
+            timeout: RPC_TIMEOUT_MS,
+          });
           if (raw) {
             const resp = Response.decode(raw);
-            if (resp.perf) {
-              const now = performance.now();
-              const latency = now - sentAt;
-              statsRef.current.received += 1;
-
-              statsRef.current.latencyMs = latency;
-              statsRef.current.minLatencyMs =
-                statsRef.current.minLatencyMs === null
-                  ? latency
-                  : Math.min(statsRef.current.minLatencyMs, latency);
-              statsRef.current.maxLatencyMs =
-                statsRef.current.maxLatencyMs === null
-                  ? latency
-                  : Math.max(statsRef.current.maxLatencyMs, latency);
-
-              // Latency history (1 min sliding window)
-              const elapsedS = (now - testStartRef.current) / 1000;
-              latencyHistoryRef.current.push({ elapsedS, latencyMs: latency });
-              const historyCutoffS = elapsedS - LATENCY_HISTORY_MS / 1000;
-              latencyHistoryRef.current = latencyHistoryRef.current.filter(
-                (e) => e.elapsedS >= historyCutoffS
+            if (resp.perf && resp.perf.sequenceNumber === seq) {
+              recordSuccess(
+                performance.now() - sentAt,
+                payload.length + raw.length
               );
-
-              // Avg and median from history window
-              const windowLatencies = latencyHistoryRef.current.map(
-                (e) => e.latencyMs
-              );
-              const sum = windowLatencies.reduce((a, b) => a + b, 0);
-              statsRef.current.avgLatencyMs = sum / windowLatencies.length;
-              const sorted = [...windowLatencies].sort((a, b) => a - b);
-              const mid = Math.floor(sorted.length / 2);
-              statsRef.current.medianLatencyMs =
-                sorted.length % 2 === 0
-                  ? (sorted[mid - 1] + sorted[mid]) / 2
-                  : sorted[mid];
-
-              // RPS from history window
-              const hist = latencyHistoryRef.current;
-              const histDuration =
-                hist.length > 1
-                  ? hist[hist.length - 1].elapsedS - hist[0].elapsedS
-                  : 0;
-              statsRef.current.rps =
-                histDuration > 0 ? (hist.length - 1) / histDuration : 0;
-
-              // Throughput: 3s sliding window
-              const transferredBytes = payload.length + raw.length;
-              bytesWindowRef.current.push({ ts: now, bytes: transferredBytes });
-              const cutoff = now - THROUGHPUT_WINDOW_MS;
-              bytesWindowRef.current = bytesWindowRef.current.filter(
-                (e) => e.ts >= cutoff
-              );
-              const windowBytes = bytesWindowRef.current.reduce(
-                (acc, e) => acc + e.bytes,
-                0
-              );
-              const windowDuration =
-                bytesWindowRef.current.length > 1
-                  ? (bytesWindowRef.current[bytesWindowRef.current.length - 1]
-                      .ts -
-                      bytesWindowRef.current[0].ts) /
-                    1000
-                  : 0;
-              statsRef.current.bitsPerSecond =
-                windowDuration > 0 ? (windowBytes * 8) / windowDuration : 0;
-
-              statsRef.current.lossRate =
-                statsRef.current.sent > 0
-                  ? ((statsRef.current.sent - statsRef.current.received) /
-                      statsRef.current.sent) *
-                    100
-                  : 0;
+            } else {
+              // Wrong/missing sequence number (or a non-perf response, e.g. a
+              // stray settings reply): don't trust it as a latency sample.
+              recordLoss();
             }
+          } else {
+            recordLoss();
           }
         } catch {
-          // sent/received counter mismatch already reflects loss rate
+          // Timeout or transport error: counts as a lost request.
+          recordLoss();
         }
 
         const elapsed = performance.now() - sentAt;
