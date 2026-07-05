@@ -54,6 +54,7 @@ export function StatsGrid({ stats }: { stats: PerfStats }) {
         </div>
         <div className="stat-sub">
           {stats.received} / {stats.sent} packets
+          {stats.errors > 0 ? `, errors ${stats.errors}` : ""}
         </div>
       </div>
     </div>

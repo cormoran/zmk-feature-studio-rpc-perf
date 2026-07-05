@@ -14,7 +14,7 @@ import {
   ZMKAppProvider,
 } from "@cormoran/zmk-studio-react-hook/testing";
 import { PerfSection, SUBSYSTEM_IDENTIFIER } from "../src/App";
-import { Response } from "../src/proto/zmk/perf/perf";
+import { ErrorCode, Response } from "../src/proto/zmk/perf/perf";
 
 jest.mock("@zmkfirmware/zmk-studio-ts-client", () => ({
   call_rpc: jest.fn(),
@@ -45,6 +45,12 @@ function perfResponsePayload(sequenceNumber: number) {
     Response.create({
       perf: { sequenceNumber, data: new Uint8Array(0), split: false },
     })
+  ).finish();
+}
+
+function errorResponsePayload(code: ErrorCode, message: string) {
+  return Response.encode(
+    Response.create({ error: { code, message } })
   ).finish();
 }
 
@@ -283,6 +289,41 @@ describe("PerfSection Component", () => {
         .getByText(/Last latency/i)
         .closest(".stat-card") as HTMLElement;
       expect(lastLatencyCard).toHaveTextContent("—");
+
+      fireEvent.click(screen.getByRole("button", { name: /Stop/i }));
+    });
+
+    it("surfaces a structured error response instead of counting it as plain packet loss", async () => {
+      const { call_rpc } = await import("@zmkfirmware/zmk-studio-ts-client");
+      (call_rpc as jest.Mock).mockReset();
+      (call_rpc as jest.Mock)
+        .mockResolvedValueOnce({
+          custom: { call: { payload: settingsPayload } },
+        })
+        .mockResolvedValueOnce({
+          custom: {
+            call: {
+              payload: errorResponsePayload(
+                ErrorCode.ERROR_SPLIT_NOT_SUPPORTED,
+                "Failed to process request: -93"
+              ),
+            },
+          },
+        })
+        .mockImplementation(() => new Promise(() => {}));
+
+      await renderAndStart({ intervalMs: 9999 });
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(STATS_FLUSH_INTERVAL_MS);
+      });
+
+      expect(
+        screen.getByText(/Split relay not supported by this firmware build/i)
+      ).toBeInTheDocument();
+      // Error responses are received, not lost: 0% loss with 1 error noted.
+      expect(screen.getByText("0.0 %")).toBeInTheDocument();
+      expect(screen.getByText("0 / 1 packets, errors 1")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /Stop/i }));
     });

@@ -292,7 +292,7 @@ static int handle_perf_request(const zmk_perf_PerfRequest *req, zmk_perf_Respons
     IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
         return handle_split_perf_request(req, resp);
 #else
-        return -ENOTSUP;
+        return -EPROTONOSUPPORT;
 #endif
     }
 
@@ -326,6 +326,23 @@ ZMK_RPC_CUSTOM_SUBSYSTEM(zmk__perf, &perf_feature_meta, perf_rpc_handle_request)
 
 ZMK_RPC_CUSTOM_SUBSYSTEM_RESPONSE_BUFFER(zmk__perf, zmk_perf_Response);
 
+static zmk_perf_ErrorCode perf_error_code_from_errno(int err) {
+    switch (err) {
+    case -EMSGSIZE:
+        return zmk_perf_ErrorCode_ERROR_MSG_TOO_LARGE;
+    case -EBUSY:
+        return zmk_perf_ErrorCode_ERROR_SPLIT_BUSY;
+    case -EAGAIN:
+        return zmk_perf_ErrorCode_ERROR_SPLIT_TIMEOUT;
+    case -EPROTONOSUPPORT:
+        return zmk_perf_ErrorCode_ERROR_SPLIT_NOT_SUPPORTED;
+    case -ENOTSUP:
+        return zmk_perf_ErrorCode_ERROR_UNSUPPORTED_REQUEST;
+    default:
+        return zmk_perf_ErrorCode_ERROR_UNKNOWN;
+    }
+}
+
 static bool perf_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
                                     pb_callback_t *encode_response) {
     zmk_perf_Response *resp =
@@ -339,6 +356,7 @@ static bool perf_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
         LOG_WRN("Failed to decode perf request: %s", PB_GET_ERROR(&req_stream));
         zmk_perf_ErrorResponse err = zmk_perf_ErrorResponse_init_zero;
         snprintf(err.message, sizeof(err.message), "Failed to decode request");
+        err.code = zmk_perf_ErrorCode_ERROR_DECODE_FAILED;
         resp->which_response_type = zmk_perf_Response_error_tag;
         resp->response_type.error = err;
         return true;
@@ -360,6 +378,7 @@ static bool perf_rpc_handle_request(const zmk_custom_CallRequest *raw_request,
     if (ret != 0) {
         zmk_perf_ErrorResponse err = zmk_perf_ErrorResponse_init_zero;
         snprintf(err.message, sizeof(err.message), "Failed to process request: %d", ret);
+        err.code = perf_error_code_from_errno(ret);
         resp->which_response_type = zmk_perf_Response_error_tag;
         resp->response_type.error = err;
     }

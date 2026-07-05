@@ -20,6 +20,9 @@ https://cormoran.github.io/zmk-feature-studio-rpc-perf/
   - Ping latency (current / min / max in ms)
   - Throughput (bits per second, computed over a 3-second sliding window)
   - Packet-loss rate (%) with raw sent/received counter
+- **Structured error reporting** – firmware-side failures (unsupported split
+  relay, a busy or timed-out split request, oversized payloads, ...) surface
+  as a specific message in the web UI instead of just extra packet loss
 - **USB and BLE connection** – the web UI supports both USB serial and BLE (GATT)
 
 ## Setup

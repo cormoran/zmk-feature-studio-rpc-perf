@@ -4,6 +4,7 @@ export function PerfControls({
   useSplit,
   setUseSplit,
   isRunning,
+  splitDisabled,
   requestSize,
   maxRequestSize,
   setRequestSize,
@@ -16,6 +17,7 @@ export function PerfControls({
   useSplit: boolean;
   setUseSplit: (v: boolean) => void;
   isRunning: boolean;
+  splitDisabled: boolean;
   requestSize: number;
   maxRequestSize: number;
   setRequestSize: (v: number) => void;
@@ -43,7 +45,12 @@ export function PerfControls({
             id="target-split"
             type="button"
             className={`target-option${useSplit ? " target-active" : ""}`}
-            disabled={isRunning}
+            disabled={isRunning || splitDisabled}
+            title={
+              splitDisabled
+                ? "Firmware was not built with CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY"
+                : undefined
+            }
             onClick={() => setUseSplit(true)}
           >
             Split

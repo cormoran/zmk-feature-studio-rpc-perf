@@ -3,10 +3,11 @@
  * request loop, running stats, and firmware settings/limits.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Request, Response } from "../proto/zmk/perf/perf";
+import { ErrorCode, Request, Response } from "../proto/zmk/perf/perf";
 import type { SettingsResponse } from "../proto/zmk/perf/perf";
 import { ZMKCustomSubsystem } from "@cormoran/zmk-studio-react-hook";
 import { requestSizeMax, responseSizeMax } from "../lib/frameSize";
+import { describeErrorCode } from "../lib/errorCode";
 import type { LatencyPoint } from "../components/LatencyGraph";
 
 const THROUGHPUT_WINDOW_MS = 3000;
@@ -26,6 +27,7 @@ const RPC_TIMEOUT_MS = 15000;
 export interface PerfStats {
   sent: number;
   received: number;
+  errors: number;
   latencyMs: number | null;
   minLatencyMs: number | null;
   maxLatencyMs: number | null;
@@ -34,11 +36,13 @@ export interface PerfStats {
   bitsPerSecond: number;
   rps: number;
   lossRate: number;
+  lastErrorMessage: string | null;
 }
 
 export const INITIAL_STATS: PerfStats = {
   sent: 0,
   received: 0,
+  errors: 0,
   latencyMs: null,
   minLatencyMs: null,
   maxLatencyMs: null,
@@ -47,6 +51,7 @@ export const INITIAL_STATS: PerfStats = {
   bitsPerSecond: 0,
   rps: 0,
   lossRate: 0,
+  lastErrorMessage: null,
 };
 
 type Connection = ConstructorParameters<typeof ZMKCustomSubsystem>[0];
@@ -167,10 +172,21 @@ export function usePerfTest({
         const recordLoss = () => {
           statsRef.current.lossRate =
             statsRef.current.sent > 0
-              ? ((statsRef.current.sent - statsRef.current.received) /
+              ? ((statsRef.current.sent -
+                  statsRef.current.received -
+                  statsRef.current.errors) /
                   statsRef.current.sent) *
                 100
               : 0;
+        };
+
+        // An error response means the transport round-trip succeeded — the
+        // firmware explicitly rejected the request — so it should not count
+        // toward the packet-loss rate the way a timeout/exception does.
+        const recordError = (code: ErrorCode, message: string) => {
+          statsRef.current.errors += 1;
+          statsRef.current.lastErrorMessage = describeErrorCode(code, message);
+          recordLoss();
         };
 
         const recordSuccess = (latency: number, transferredBytes: number) => {
@@ -255,9 +271,11 @@ export function usePerfTest({
                 performance.now() - sentAt,
                 payload.length + raw.length
               );
+            } else if (resp.error) {
+              recordError(resp.error.code, resp.error.message);
             } else {
-              // Wrong/missing sequence number (or a non-perf response, e.g. a
-              // stray settings reply): don't trust it as a latency sample.
+              // Wrong/missing sequence number (or a stray settings reply):
+              // don't trust it as a latency sample.
               recordLoss();
             }
           } else {
