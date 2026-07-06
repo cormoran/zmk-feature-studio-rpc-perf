@@ -113,6 +113,7 @@ export function PerfSection() {
         useSplit={perf.useSplit}
         setUseSplit={perf.setUseSplit}
         isRunning={perf.isRunning}
+        splitDisabled={perf.settings?.splitRelayEnabled === false}
         requestSize={perf.effectiveRequestSize}
         maxRequestSize={perf.maxRequestSize}
         setRequestSize={perf.setRequestSize}
@@ -146,6 +147,12 @@ export function PerfSection() {
         settings={perf.settings}
         settingsError={perf.settingsError}
       />
+
+      {perf.stats.lastErrorMessage && (
+        <div className="warning-message">
+          <p>⚠ {perf.stats.lastErrorMessage}</p>
+        </div>
+      )}
 
       <div className="graph-section">
         <h3>Latency over time (last 60s)</h3>

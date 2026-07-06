@@ -41,7 +41,20 @@ message Request {
     }
 }
 
-message ErrorResponse { string message = 1; }
+enum ErrorCode {
+    ERROR_UNKNOWN = 0;
+    ERROR_DECODE_FAILED = 1;
+    ERROR_UNSUPPORTED_REQUEST = 2;
+    ERROR_SPLIT_NOT_SUPPORTED = 3;
+    ERROR_SPLIT_BUSY = 4;
+    ERROR_SPLIT_TIMEOUT = 5;
+    ERROR_MSG_TOO_LARGE = 6;
+}
+
+message ErrorResponse {
+    string message = 1;
+    ErrorCode code = 2;
+}
 
 message Response {
     oneof response_type {
