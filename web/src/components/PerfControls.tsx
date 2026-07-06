@@ -13,6 +13,8 @@ export function PerfControls({
   setResponseSize,
   intervalMs,
   setIntervalMs,
+  effectiveWindowSize,
+  setWindowSize,
 }: {
   useSplit: boolean;
   setUseSplit: (v: boolean) => void;
@@ -26,11 +28,13 @@ export function PerfControls({
   setResponseSize: (v: number) => void;
   intervalMs: number;
   setIntervalMs: (v: number) => void;
+  effectiveWindowSize: number;
+  setWindowSize: (v: number) => void;
 }) {
   return (
     <div className="perf-controls">
       <div className="input-group">
-        <label htmlFor="target-split">Target:</label>
+        <span className="input-group-label">Target:</span>
         <div className="target-toggle">
           <button
             id="target-local"
@@ -101,6 +105,27 @@ export function PerfControls({
           disabled={isRunning}
           onChange={setIntervalMs}
         />
+      </div>
+
+      <div className="input-group">
+        <label htmlFor="window-size">Max in-flight requests:</label>
+        <StepInput
+          id="window-size"
+          value={effectiveWindowSize}
+          min={1}
+          max={16}
+          smallStep={1}
+          largeStep={4}
+          presets={[1, 2, 4, 8, 16]}
+          disabled={isRunning || useSplit}
+          onChange={setWindowSize}
+        />
+        {useSplit && (
+          <p className="stat-sub">
+            Forced to 1 for the Split target — the firmware only tracks one
+            outstanding split request at a time.
+          </p>
+        )}
       </div>
     </div>
   );

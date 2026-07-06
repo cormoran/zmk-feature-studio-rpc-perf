@@ -5,16 +5,18 @@
  * of the ZMK Studio custom RPC protocol over USB (serial) or BLE.
  */
 
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import "./App.css";
 import { connect as serial_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/serial";
 import { connect as ble_connect } from "@zmkfirmware/zmk-studio-ts-client/transport/gatt";
 import { ZMKConnection, ZMKAppContext } from "@cormoran/zmk-studio-react-hook";
 import { usePerfTest } from "./hooks/usePerfTest";
+import { useBenchmarkSweep } from "./hooks/useBenchmarkSweep";
 import { PerfControls } from "./components/PerfControls";
 import { DeviceLimits } from "./components/DeviceLimits";
 import { StatsGrid } from "./components/StatsGrid";
 import { LatencyGraph } from "./components/LatencyGraph";
+import { SweepPanel } from "./components/SweepPanel";
 
 export const SUBSYSTEM_IDENTIFIER = "zmk__perf";
 
@@ -87,6 +89,12 @@ export function PerfSection() {
   const subsystemIndex = subsystem?.index;
 
   const perf = usePerfTest({ connection, subsystemIndex });
+  const sweep = useBenchmarkSweep({
+    serviceRef: perf.serviceRef,
+    settings: perf.settings,
+    subsystemIndex,
+  });
+  const [mode, setMode] = useState<"manual" | "sweep">("manual");
 
   if (!zmkApp) return null;
 
@@ -109,61 +117,111 @@ export function PerfSection() {
     <section className="card">
       <h2>⚡ Performance Test</h2>
 
-      <PerfControls
-        useSplit={perf.useSplit}
-        setUseSplit={perf.setUseSplit}
-        isRunning={perf.isRunning}
-        splitDisabled={perf.settings?.splitRelayEnabled === false}
-        requestSize={perf.effectiveRequestSize}
-        maxRequestSize={perf.maxRequestSize}
-        setRequestSize={perf.setRequestSize}
-        responseSize={perf.effectiveResponseSize}
-        maxResponseSize={perf.maxResponseSize}
-        setResponseSize={perf.setResponseSize}
-        intervalMs={perf.intervalMs}
-        setIntervalMs={perf.setIntervalMs}
-      />
-
-      <div className="button-group">
-        {perf.isRunning ? (
-          <button className="btn btn-secondary" onClick={perf.stop}>
-            ⏹ Stop
+      <div className="input-group">
+        <span className="input-group-label">Mode:</span>
+        <div className="target-toggle">
+          <button
+            id="mode-manual"
+            type="button"
+            className={`target-option${mode === "manual" ? " target-active" : ""}`}
+            onClick={() => setMode("manual")}
+          >
+            Manual
           </button>
-        ) : (
-          <button className="btn btn-primary" onClick={perf.start}>
-            ▶ Start
+          <button
+            id="mode-sweep"
+            type="button"
+            className={`target-option${mode === "sweep" ? " target-active" : ""}`}
+            onClick={() => setMode("sweep")}
+          >
+            Sweep
           </button>
-        )}
-        <button
-          className="btn btn-secondary"
-          disabled={perf.isRunning}
-          onClick={perf.reset}
-        >
-          🔄 Reset
-        </button>
+        </div>
       </div>
+
+      {mode === "manual" ? (
+        <>
+          <PerfControls
+            useSplit={perf.useSplit}
+            setUseSplit={perf.setUseSplit}
+            isRunning={perf.isRunning}
+            splitDisabled={perf.settings?.splitRelayEnabled === false}
+            requestSize={perf.effectiveRequestSize}
+            maxRequestSize={perf.maxRequestSize}
+            setRequestSize={perf.setRequestSize}
+            responseSize={perf.effectiveResponseSize}
+            maxResponseSize={perf.maxResponseSize}
+            setResponseSize={perf.setResponseSize}
+            intervalMs={perf.intervalMs}
+            setIntervalMs={perf.setIntervalMs}
+            effectiveWindowSize={perf.effectiveWindowSize}
+            setWindowSize={perf.setWindowSize}
+          />
+
+          <div className="button-group">
+            {perf.isRunning ? (
+              <button className="btn btn-secondary" onClick={perf.stop}>
+                ⏹ Stop
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={perf.start}>
+                ▶ Start
+              </button>
+            )}
+            <button
+              className="btn btn-secondary"
+              disabled={perf.isRunning}
+              onClick={perf.reset}
+            >
+              🔄 Reset
+            </button>
+          </div>
+
+          {perf.stats.lastErrorMessage && (
+            <div className="warning-message">
+              <p>⚠ {perf.stats.lastErrorMessage}</p>
+            </div>
+          )}
+
+          <div className="graph-section">
+            <h3>Latency over time (last 60s)</h3>
+            <LatencyGraph
+              history={perf.latencyHistory}
+              avgLatencyMs={perf.stats.avgLatencyMs}
+              medianLatencyMs={perf.stats.medianLatencyMs}
+            />
+          </div>
+
+          <StatsGrid stats={perf.stats} />
+        </>
+      ) : (
+        <SweepPanel
+          deviceName={zmkApp.state.deviceInfo?.name ?? "unknown"}
+          settings={perf.settings}
+          dimension={sweep.dimension}
+          setDimension={sweep.setDimension}
+          selectedSizes={sweep.selectedSizes}
+          setSelectedSizes={sweep.setSelectedSizes}
+          requestsPerStep={sweep.requestsPerStep}
+          setRequestsPerStep={sweep.setRequestsPerStep}
+          fixedRequestSize={sweep.fixedRequestSize}
+          setFixedRequestSize={sweep.setFixedRequestSize}
+          fixedResponseSize={sweep.fixedResponseSize}
+          setFixedResponseSize={sweep.setFixedResponseSize}
+          useSplit={sweep.useSplit}
+          setUseSplit={sweep.setUseSplit}
+          isSweeping={sweep.isSweeping}
+          results={sweep.results}
+          skippedCount={sweep.skippedCount}
+          start={sweep.start}
+          stop={sweep.stop}
+        />
+      )}
 
       <DeviceLimits
         settings={perf.settings}
         settingsError={perf.settingsError}
       />
-
-      {perf.stats.lastErrorMessage && (
-        <div className="warning-message">
-          <p>⚠ {perf.stats.lastErrorMessage}</p>
-        </div>
-      )}
-
-      <div className="graph-section">
-        <h3>Latency over time (last 60s)</h3>
-        <LatencyGraph
-          history={perf.latencyHistory}
-          avgLatencyMs={perf.stats.avgLatencyMs}
-          medianLatencyMs={perf.stats.medianLatencyMs}
-        />
-      </div>
-
-      <StatsGrid stats={perf.stats} />
     </section>
   );
 }

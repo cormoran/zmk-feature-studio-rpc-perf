@@ -8,6 +8,7 @@ import type { SettingsResponse } from "../proto/zmk/perf/perf";
 import { ZMKCustomSubsystem } from "@cormoran/zmk-studio-react-hook";
 import { requestSizeMax, responseSizeMax } from "../lib/frameSize";
 import { describeErrorCode } from "../lib/errorCode";
+import { sendPerfRequest } from "../lib/perfRequest";
 import type { LatencyPoint } from "../components/LatencyGraph";
 
 const THROUGHPUT_WINDOW_MS = 3000;
@@ -66,6 +67,7 @@ export function usePerfTest({
   const [requestSize, setRequestSize] = useState(1);
   const [responseSize, setResponseSize] = useState(1);
   const [intervalMs, setIntervalMs] = useState(100);
+  const [windowSize, setWindowSize] = useState(1);
   const [useSplit, setUseSplit] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [stats, setStats] = useState<PerfStats>(INITIAL_STATS);
@@ -91,6 +93,11 @@ export function usePerfTest({
     subsystemIndex
   );
   const effectiveRequestSize = Math.min(requestSize, maxRequestSize);
+  // The firmware's split relay only tracks one outstanding request at a
+  // time (a second concurrent one gets -EBUSY — see
+  // handle_split_perf_request in perf_handler.c), so pipelining is only
+  // safe for the local target.
+  const effectiveWindowSize = useSplit ? 1 : windowSize;
 
   const flushStats = useCallback(() => {
     setStats({ ...statsRef.current });
@@ -150,140 +157,121 @@ export function usePerfTest({
       STATS_FLUSH_INTERVAL_MS
     );
 
-    const runLoop = async () => {
+    const recordLoss = () => {
+      statsRef.current.lossRate =
+        statsRef.current.sent > 0
+          ? ((statsRef.current.sent -
+              statsRef.current.received -
+              statsRef.current.errors) /
+              statsRef.current.sent) *
+            100
+          : 0;
+    };
+
+    // An error response means the transport round-trip succeeded — the
+    // firmware explicitly rejected the request — so it should not count
+    // toward the packet-loss rate the way a timeout/exception does.
+    const recordError = (code: ErrorCode, message: string) => {
+      statsRef.current.errors += 1;
+      statsRef.current.lastErrorMessage = describeErrorCode(code, message);
+      recordLoss();
+    };
+
+    const recordSuccess = (
+      sentAt: number,
+      latency: number,
+      transferredBytes: number
+    ) => {
+      const now = sentAt + latency;
+      statsRef.current.received += 1;
+
+      statsRef.current.latencyMs = latency;
+      statsRef.current.minLatencyMs =
+        statsRef.current.minLatencyMs === null
+          ? latency
+          : Math.min(statsRef.current.minLatencyMs, latency);
+      statsRef.current.maxLatencyMs =
+        statsRef.current.maxLatencyMs === null
+          ? latency
+          : Math.max(statsRef.current.maxLatencyMs, latency);
+
+      // Latency history (1 min sliding window)
+      const elapsedS = (now - testStartRef.current) / 1000;
+      latencyHistoryRef.current.push({ elapsedS, latencyMs: latency });
+      const historyCutoffS = elapsedS - LATENCY_HISTORY_MS / 1000;
+      latencyHistoryRef.current = latencyHistoryRef.current.filter(
+        (e) => e.elapsedS >= historyCutoffS
+      );
+
+      // Avg and median from history window
+      const windowLatencies = latencyHistoryRef.current.map((e) => e.latencyMs);
+      const sum = windowLatencies.reduce((a, b) => a + b, 0);
+      statsRef.current.avgLatencyMs = sum / windowLatencies.length;
+      const sorted = [...windowLatencies].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      statsRef.current.medianLatencyMs =
+        sorted.length % 2 === 0
+          ? (sorted[mid - 1] + sorted[mid]) / 2
+          : sorted[mid];
+
+      // RPS from history window
+      const hist = latencyHistoryRef.current;
+      const histDuration =
+        hist.length > 1 ? hist[hist.length - 1].elapsedS - hist[0].elapsedS : 0;
+      statsRef.current.rps =
+        histDuration > 0 ? (hist.length - 1) / histDuration : 0;
+
+      // Throughput: 3s sliding window
+      bytesWindowRef.current.push({ ts: now, bytes: transferredBytes });
+      const cutoff = now - THROUGHPUT_WINDOW_MS;
+      bytesWindowRef.current = bytesWindowRef.current.filter(
+        (e) => e.ts >= cutoff
+      );
+      const windowBytes = bytesWindowRef.current.reduce(
+        (acc, e) => acc + e.bytes,
+        0
+      );
+      const windowDuration =
+        bytesWindowRef.current.length > 1
+          ? (bytesWindowRef.current[bytesWindowRef.current.length - 1].ts -
+              bytesWindowRef.current[0].ts) /
+            1000
+          : 0;
+      statsRef.current.bitsPerSecond =
+        windowDuration > 0 ? (windowBytes * 8) / windowDuration : 0;
+
+      recordLoss();
+    };
+
+    // Each worker behaves like the (former) single serial loop: send a
+    // request, await its outcome, pace itself against intervalMs, repeat.
+    // Running `effectiveWindowSize` of these concurrently is what keeps up
+    // to that many requests in flight — completions interleave freely since
+    // they only touch shared refs between awaits (no real races in JS).
+    const runWorker = async () => {
       while (isRunningRef.current) {
         const seq = ++seqRef.current;
         const sentAt = performance.now();
 
-        const data = new Uint8Array(effectiveRequestSize).fill(0x55);
-        const payload = Request.encode(
-          Request.create({
-            perf: {
-              sequenceNumber: seq,
-              responseSize: effectiveResponseSize,
-              data,
-              split: useSplit,
-            },
-          })
-        ).finish();
-
         statsRef.current.sent += 1;
 
-        const recordLoss = () => {
-          statsRef.current.lossRate =
-            statsRef.current.sent > 0
-              ? ((statsRef.current.sent -
-                  statsRef.current.received -
-                  statsRef.current.errors) /
-                  statsRef.current.sent) *
-                100
-              : 0;
-        };
-
-        // An error response means the transport round-trip succeeded — the
-        // firmware explicitly rejected the request — so it should not count
-        // toward the packet-loss rate the way a timeout/exception does.
-        const recordError = (code: ErrorCode, message: string) => {
-          statsRef.current.errors += 1;
-          statsRef.current.lastErrorMessage = describeErrorCode(code, message);
-          recordLoss();
-        };
-
-        const recordSuccess = (latency: number, transferredBytes: number) => {
-          const now = sentAt + latency;
-          statsRef.current.received += 1;
-
-          statsRef.current.latencyMs = latency;
-          statsRef.current.minLatencyMs =
-            statsRef.current.minLatencyMs === null
-              ? latency
-              : Math.min(statsRef.current.minLatencyMs, latency);
-          statsRef.current.maxLatencyMs =
-            statsRef.current.maxLatencyMs === null
-              ? latency
-              : Math.max(statsRef.current.maxLatencyMs, latency);
-
-          // Latency history (1 min sliding window)
-          const elapsedS = (now - testStartRef.current) / 1000;
-          latencyHistoryRef.current.push({ elapsedS, latencyMs: latency });
-          const historyCutoffS = elapsedS - LATENCY_HISTORY_MS / 1000;
-          latencyHistoryRef.current = latencyHistoryRef.current.filter(
-            (e) => e.elapsedS >= historyCutoffS
-          );
-
-          // Avg and median from history window
-          const windowLatencies = latencyHistoryRef.current.map(
-            (e) => e.latencyMs
-          );
-          const sum = windowLatencies.reduce((a, b) => a + b, 0);
-          statsRef.current.avgLatencyMs = sum / windowLatencies.length;
-          const sorted = [...windowLatencies].sort((a, b) => a - b);
-          const mid = Math.floor(sorted.length / 2);
-          statsRef.current.medianLatencyMs =
-            sorted.length % 2 === 0
-              ? (sorted[mid - 1] + sorted[mid]) / 2
-              : sorted[mid];
-
-          // RPS from history window
-          const hist = latencyHistoryRef.current;
-          const histDuration =
-            hist.length > 1
-              ? hist[hist.length - 1].elapsedS - hist[0].elapsedS
-              : 0;
-          statsRef.current.rps =
-            histDuration > 0 ? (hist.length - 1) / histDuration : 0;
-
-          // Throughput: 3s sliding window
-          bytesWindowRef.current.push({ ts: now, bytes: transferredBytes });
-          const cutoff = now - THROUGHPUT_WINDOW_MS;
-          bytesWindowRef.current = bytesWindowRef.current.filter(
-            (e) => e.ts >= cutoff
-          );
-          const windowBytes = bytesWindowRef.current.reduce(
-            (acc, e) => acc + e.bytes,
-            0
-          );
-          const windowDuration =
-            bytesWindowRef.current.length > 1
-              ? (bytesWindowRef.current[bytesWindowRef.current.length - 1].ts -
-                  bytesWindowRef.current[0].ts) /
-                1000
-              : 0;
-          statsRef.current.bitsPerSecond =
-            windowDuration > 0 ? (windowBytes * 8) / windowDuration : 0;
-
-          recordLoss();
-        };
-
-        try {
-          // Await response before sending next request — avoids firmware mutex contention.
-          // A per-request timeout keeps a single dropped response from stalling
-          // the loop forever; any response that arrives after the timeout is
-          // simply left unawaited (the client library matches by request id,
-          // so it cannot be mistaken for the next request's response).
-          const raw = await service.callRPC(payload, {
-            timeout: RPC_TIMEOUT_MS,
-          });
-          if (raw) {
-            const resp = Response.decode(raw);
-            if (resp.perf && resp.perf.sequenceNumber === seq) {
-              recordSuccess(
-                performance.now() - sentAt,
-                payload.length + raw.length
-              );
-            } else if (resp.error) {
-              recordError(resp.error.code, resp.error.message);
-            } else {
-              // Wrong/missing sequence number (or a stray settings reply):
-              // don't trust it as a latency sample.
-              recordLoss();
-            }
-          } else {
+        const outcome = await sendPerfRequest(service, {
+          sequenceNumber: seq,
+          requestSize: effectiveRequestSize,
+          responseSize: effectiveResponseSize,
+          split: useSplit,
+          timeoutMs: RPC_TIMEOUT_MS,
+        });
+        switch (outcome.kind) {
+          case "success":
+            recordSuccess(sentAt, outcome.latencyMs, outcome.bytes);
+            break;
+          case "error":
+            recordError(outcome.code, outcome.message);
+            break;
+          case "loss":
             recordLoss();
-          }
-        } catch {
-          // Timeout or transport error: counts as a lost request.
-          recordLoss();
+            break;
         }
 
         const elapsed = performance.now() - sentAt;
@@ -294,11 +282,14 @@ export function usePerfTest({
       }
     };
 
-    runLoop();
+    for (let i = 0; i < effectiveWindowSize; i++) {
+      runWorker();
+    }
   }, [
     effectiveRequestSize,
     effectiveResponseSize,
     intervalMs,
+    effectiveWindowSize,
     useSplit,
     flushStats,
   ]);
@@ -343,6 +334,9 @@ export function usePerfTest({
     setResponseSize,
     intervalMs,
     setIntervalMs,
+    windowSize,
+    setWindowSize,
+    effectiveWindowSize,
     useSplit,
     setUseSplit,
     isRunning,
