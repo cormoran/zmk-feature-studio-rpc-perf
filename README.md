@@ -56,7 +56,9 @@ CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
 For BLE split testing, enable the module on both halves. The Studio-connected central also needs
 `CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y`; the peripheral only needs `CONFIG_ZMK_STUDIO_RPC_PERF=y`.
 The split path uses typed ZMK relay events, so enable the perf split RPC relay config. Increase
-the relay event payload size if you need larger split request or response payloads.
+the relay event payload size if you need larger split request or response payloads. Each relay
+message carries only its header plus the bytes actually in use, so a small request or response
+stays small on the wire regardless of `CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN`.
 
 ```conf
 CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
