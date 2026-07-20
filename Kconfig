@@ -11,11 +11,20 @@ config ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY
     bool "Relay Studio RPC performance requests across split halves"
     depends on ZMK_SPLIT && ZMK_SPLIT_BLE
     select ZMK_SPLIT_RELAY_EVENT
+    select ZMK_LOW_PRIORITY_WORK_QUEUE
     help
       Relays performance RPC requests from the central side to split
       peripherals, and relays performance responses back to the central side.
       Increase CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN to allow larger split
       performance request and response payloads.
+
+      The peripheral sends its relay response from ZMK's low-priority work queue
+      so that the outgoing serialize + report chain does not nest on top of the
+      incoming relay-handling stack. That chain needs more stack than the
+      low-priority queue's default, and it grows with
+      CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN, so raise
+      CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE accordingly (a build assert
+      enforces the minimum).
 
 config ZMK_STUDIO_RPC_PERF_SPLIT_TIMEOUT_MS
     int "Timeout for split performance responses in milliseconds"

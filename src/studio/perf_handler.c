@@ -26,6 +26,11 @@
 #include <zmk/studio/custom.h>
 #endif
 
+#if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY) &&                                      \
+    !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+#include <zmk/workqueue.h>
+#endif
+
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #define PERF_MAX_DATA_SIZE 2048
@@ -270,6 +275,59 @@ static int perf_split_send_response(uint32_t sequence_number, uint16_t response_
     return raise_zmk_perf_split_relay_response(event);
 }
 
+/*
+ * The incoming request is delivered to us on the system workqueue (the split
+ * transport hands relayed events off to it). If we built and raised the response
+ * event straight from the request handler, the whole outgoing path -- event
+ * raise (which copies the relay struct by value more than once), the
+ * peripheral->central serialize listener, and report_event -- would run nested on
+ * top of the still-unwound incoming deserialize path on that one workqueue stack.
+ * Each hop holds a CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN-sized frame, so the
+ * stacked in + out chains overrun the workqueue stack guard and fault the
+ * peripheral.
+ *
+ * Instead, hand the response off to ZMK's low-priority work queue so the request
+ * path fully unwinds first and the response is built on a fresh stack; peak stack
+ * becomes max(incoming, outgoing) rather than their sum.
+ *
+ * Note: on a wired half-duplex split the peripheral only transmits its queued
+ * events when the central polls, so the response must be enqueued before the next
+ * poll. The low-priority queue can lag behind other work; if that regresses the
+ * half-duplex round trip, move this back to the system workqueue (k_work_submit).
+ */
+struct perf_split_pending_response {
+    uint32_t sequence_number;
+    uint16_t response_size;
+};
+
+K_MSGQ_DEFINE(perf_split_pending_response_msgq, sizeof(struct perf_split_pending_response), 4, 4);
+
+/*
+ * The outgoing raise -> serialize -> report relay chain keeps several
+ * CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN-sized frames live at once (~1KB at the
+ * default data length), which is more than the low-priority work queue's default
+ * stack. The stack can only be sized from the consumer config, so fail the build
+ * with a clear message rather than let the peripheral overflow at runtime. Raise
+ * CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE (it scales with the relay data length).
+ */
+BUILD_ASSERT(CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE >=
+                 768 + 4 * CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN,
+             "CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE is too small for the perf split relay "
+             "response chain; increase it (grows with CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN).");
+
+static void perf_split_send_response_work(struct k_work *work) {
+    struct perf_split_pending_response pending;
+
+    while (k_msgq_get(&perf_split_pending_response_msgq, &pending, K_NO_WAIT) == 0) {
+        int ret = perf_split_send_response(pending.sequence_number, pending.response_size);
+        if (ret < 0) {
+            LOG_WRN("Failed to send split perf response: %d", ret);
+        }
+    }
+}
+
+static K_WORK_DEFINE(perf_split_send_response_work_item, perf_split_send_response_work);
+
 static int perf_split_handle_request_event(const struct zmk_perf_split_relay_request *ev) {
     if (ev->data_size > sizeof(ev->data) ||
         ev->response_size > PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE) {
@@ -278,10 +336,17 @@ static int perf_split_handle_request_event(const struct zmk_perf_split_relay_req
         return ZMK_EV_EVENT_HANDLED;
     }
 
-    int ret = perf_split_send_response(ev->sequence_number, ev->response_size);
-    if (ret < 0) {
-        LOG_WRN("Failed to send split perf response: %d", ret);
+    struct perf_split_pending_response pending = {
+        .sequence_number = ev->sequence_number,
+        .response_size = ev->response_size,
+    };
+
+    if (k_msgq_put(&perf_split_pending_response_msgq, &pending, K_NO_WAIT) != 0) {
+        LOG_WRN("Dropping split perf response, queue full: seq=%u", ev->sequence_number);
+        return ZMK_EV_EVENT_HANDLED;
     }
+
+    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &perf_split_send_response_work_item);
 
     return ZMK_EV_EVENT_HANDLED;
 }
