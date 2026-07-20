@@ -1,0 +1,43 @@
+path,sweep,size,n,ok,success_rate,dominant_failure,failures,lat_min_ms,lat_mean_ms,lat_median_ms,lat_p95_ms,lat_max_ms
+usb-single,response_size,0,20,20,1.0,,,7.345,10.915,8.508,21.529,22.711
+usb-single,response_size,8,20,20,1.0,,,5.046,13.226,11.637,22.528,23.239
+usb-single,response_size,16,20,20,1.0,,,6.255,10.913,9.68,16.984,19.758
+usb-single,response_size,24,20,20,1.0,,,7.229,12.763,11.305,27.929,31.043
+usb-single,response_size,28,20,20,1.0,,,6.852,14.532,11.816,25.445,30.6
+usb-single,response_size,30,20,20,1.0,,,7.99,18.5,17.734,30.095,30.92
+usb-single,response_size,31,20,20,1.0,,,7.717,13.262,10.338,22.051,32.677
+usb-single,response_size,32,20,20,1.0,,,8.519,14.959,11.603,30.984,31.365
+usb-single,response_size,40,20,20,1.0,,,9.586,14.676,13.396,24.792,25.031
+usb-single,response_size,48,20,20,1.0,,,8.084,16.505,14.971,27.621,28.706
+usb-single,response_size,64,20,20,1.0,,,10.155,16.835,14.23,27.432,31.457
+usb-single,response_size,96,20,20,1.0,,,9.735,16.921,15.866,26.062,30.265
+usb-single,response_size,128,20,20,1.0,,,14.782,22.481,21.194,34.17,45.738
+usb-single,response_size,192,20,20,1.0,,,19.376,32.815,27.78,53.757,61.043
+usb-single,response_size,256,20,20,1.0,,,21.524,28.049,26.954,36.589,41.755
+usb-single,response_size,384,20,20,1.0,,,27.339,39.879,35.816,55.783,57.952
+usb-single,response_size,512,20,20,1.0,,,33.677,44.457,45.04,59.355,68.992
+usb-single,response_size,768,20,20,1.0,,,49.515,69.524,64.594,100.19,122.552
+usb-single,response_size,1024,20,20,1.0,,,67.668,91.254,82.723,144.683,150.747
+usb-single,response_size,1536,20,20,1.0,,,95.562,114.981,113.988,133.785,138.77
+usb-single,response_size,2048,20,20,1.0,,,119.357,151.875,153.621,191.438,200.509
+usb-single,request_data,0,20,20,1.0,,,6.005,11.725,11.426,20.613,22.133
+usb-single,request_data,8,20,20,1.0,,,7.353,14.888,13.79,28.834,30.015
+usb-single,request_data,16,20,2,0.1,timeout_no_bytes,"{""timeout_no_bytes"": 18}",11.074,12.423,12.423,13.773,13.773
+usb-single,request_data,24,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 20}",,,,,
+usb-single,request_data,28,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 20}",,,,,
+usb-single,request_data,30,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 20}",,,,,
+usb-single,request_data,31,0,0,,skipped,,,,,,
+usb-single,request_data,32,0,0,,skipped,,,,,,
+usb-single,request_data,40,0,0,,skipped,,,,,,
+usb-single,request_data,48,0,0,,skipped,,,,,,
+usb-single,request_data,64,0,0,,skipped,,,,,,
+usb-single,request_data,96,0,0,,skipped,,,,,,
+usb-single,request_data,128,0,0,,skipped,,,,,,
+usb-single,request_data,192,0,0,,skipped,,,,,,
+usb-single,request_data,256,0,0,,skipped,,,,,,
+usb-single,request_data,384,0,0,,skipped,,,,,,
+usb-single,request_data,512,0,0,,skipped,,,,,,
+usb-single,request_data,768,0,0,,skipped,,,,,,
+usb-single,request_data,1024,0,0,,skipped,,,,,,
+usb-single,request_data,1536,0,0,,skipped,,,,,,
+usb-single,request_data,2048,0,0,,skipped,,,,,,

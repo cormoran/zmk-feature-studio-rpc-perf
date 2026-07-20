@@ -1,0 +1,19 @@
+path,sweep,size,n,ok,success_rate,dominant_failure,failures,lat_min_ms,lat_mean_ms,lat_median_ms,lat_p95_ms,lat_max_ms
+uart,response_size,0,5,5,1.0,,,27.083,31.787,29.594,40.601,40.601
+uart,response_size,8,5,5,1.0,,,26.794,44.206,40.731,76.045,76.045
+uart,response_size,16,5,0,0.0,partial_frame_stall,"{""partial_frame_stall"": 5}",,,,,
+uart,response_size,20,5,0,0.0,partial_frame_stall,"{""partial_frame_stall"": 5}",,,,,
+uart,response_size,24,5,0,0.0,partial_frame_stall,"{""partial_frame_stall"": 5}",,,,,
+uart,response_size,28,0,0,,skipped,,,,,,
+uart,response_size,32,0,0,,skipped,,,,,,
+uart,response_size,40,0,0,,skipped,,,,,,
+uart,response_size,64,0,0,,skipped,,,,,,
+uart,request_data,0,5,5,1.0,,,28.517,29.648,30.109,30.888,30.888
+uart,request_data,8,5,5,1.0,,,24.237,36.4,31.928,62.841,62.841
+uart,request_data,16,5,3,0.6,timeout_no_bytes,"{""timeout_no_bytes"": 2}",31.724,33.728,33.103,36.358,36.358
+uart,request_data,24,5,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 5}",,,,,
+uart,request_data,28,5,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 5}",,,,,
+uart,request_data,30,5,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 5}",,,,,
+uart,request_data,31,0,0,,skipped,,,,,,
+uart,request_data,32,0,0,,skipped,,,,,,
+uart,request_data,40,0,0,,skipped,,,,,,

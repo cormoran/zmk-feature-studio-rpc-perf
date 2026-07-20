@@ -1,0 +1,63 @@
+path,sweep,size,rep,latency_ms,status,detail
+uart,response_size,0,0,27.083,ok,
+uart,response_size,0,1,29.594,ok,
+uart,response_size,0,2,40.601,ok,
+uart,response_size,0,3,32.071,ok,
+uart,response_size,0,4,29.587,ok,
+uart,response_size,8,0,40.731,ok,
+uart,response_size,8,1,26.794,ok,
+uart,response_size,8,2,31.861,ok,
+uart,response_size,8,3,45.598,ok,
+uart,response_size,8,4,76.045,ok,
+uart,response_size,16,0,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,16,1,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,16,2,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,16,3,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,16,4,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,20,0,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,20,1,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,20,2,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,20,3,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,20,4,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,24,0,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,24,1,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,24,2,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,24,3,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,24,4,,partial_frame_stall,"32B seen, frame never closed"
+uart,response_size,28,0,,skipped,early-stop
+uart,response_size,32,0,,skipped,early-stop
+uart,response_size,40,0,,skipped,early-stop
+uart,response_size,64,0,,skipped,early-stop
+uart,request_data,0,0,30.888,ok,
+uart,request_data,0,1,30.109,ok,
+uart,request_data,0,2,28.533,ok,
+uart,request_data,0,3,30.194,ok,
+uart,request_data,0,4,28.517,ok,
+uart,request_data,8,0,24.237,ok,
+uart,request_data,8,1,38.048,ok,
+uart,request_data,8,2,31.928,ok,
+uart,request_data,8,3,24.947,ok,
+uart,request_data,8,4,62.841,ok,
+uart,request_data,16,0,,timeout_no_bytes,no bytes received
+uart,request_data,16,1,36.358,ok,
+uart,request_data,16,2,33.103,ok,
+uart,request_data,16,3,,timeout_no_bytes,no bytes received
+uart,request_data,16,4,31.724,ok,
+uart,request_data,24,0,,timeout_no_bytes,no bytes received
+uart,request_data,24,1,,timeout_no_bytes,no bytes received
+uart,request_data,24,2,,timeout_no_bytes,no bytes received
+uart,request_data,24,3,,timeout_no_bytes,no bytes received
+uart,request_data,24,4,,timeout_no_bytes,no bytes received
+uart,request_data,28,0,,timeout_no_bytes,no bytes received
+uart,request_data,28,1,,timeout_no_bytes,no bytes received
+uart,request_data,28,2,,timeout_no_bytes,no bytes received
+uart,request_data,28,3,,timeout_no_bytes,no bytes received
+uart,request_data,28,4,,timeout_no_bytes,no bytes received
+uart,request_data,30,0,,timeout_no_bytes,no bytes received
+uart,request_data,30,1,,timeout_no_bytes,no bytes received
+uart,request_data,30,2,,timeout_no_bytes,no bytes received
+uart,request_data,30,3,,timeout_no_bytes,no bytes received
+uart,request_data,30,4,,timeout_no_bytes,no bytes received
+uart,request_data,31,0,,skipped,early-stop
+uart,request_data,32,0,,skipped,early-stop
+uart,request_data,40,0,,skipped,early-stop

@@ -1,0 +1,28 @@
+path,sweep,size,n,ok,success_rate,dominant_failure,failures,lat_min_ms,lat_mean_ms,lat_median_ms,lat_p95_ms,lat_max_ms
+usb-dual,response_size,0,20,20,1.0,,,5.342,10.275,7.699,21.751,23.727
+usb-dual,response_size,8,20,20,1.0,,,5.398,9.633,8.294,16.411,16.84
+usb-dual,response_size,16,20,20,1.0,,,7.339,12.464,11.187,21.813,30.174
+usb-dual,response_size,24,20,20,1.0,,,8.385,14.171,11.127,26.505,30.593
+usb-dual,response_size,28,20,20,1.0,,,7.155,11.162,11.096,15.641,15.953
+usb-dual,response_size,30,20,20,1.0,,,7.967,14.176,10.864,21.098,49.88
+usb-dual,response_size,31,20,20,1.0,,,7.331,12.378,10.938,19.561,24.853
+usb-dual,response_size,32,20,20,1.0,,,6.477,10.653,9.829,14.49,16.094
+usb-dual,response_size,40,20,20,1.0,,,7.377,12.911,11.435,19.478,28.654
+usb-dual,response_size,48,20,20,1.0,,,7.594,13.863,13.17,18.715,29.248
+usb-dual,response_size,64,20,20,1.0,,,7.361,12.307,10.739,18.743,21.736
+usb-dual,response_size,96,20,20,1.0,,,9.175,14.19,14.016,20.002,25.601
+usb-dual,response_size,128,20,20,1.0,,,12.718,17.397,17.44,21.653,23.092
+usb-dual,response_size,192,20,20,1.0,,,14.382,21.291,20.212,27.222,33.639
+usb-dual,response_size,256,20,20,1.0,,,19.399,28.526,28.953,36.244,43.932
+usb-dual,response_size,384,20,20,1.0,,,25.213,33.196,33.981,36.895,41.66
+usb-dual,response_size,512,20,20,1.0,,,34.547,45.175,42.63,56.201,64.003
+usb-dual,response_size,768,20,20,1.0,,,48.203,61.268,57.473,81.825,82.243
+usb-dual,response_size,1024,20,20,1.0,,,63.691,77.59,75.231,97.937,102.661
+usb-dual,response_size,1536,20,20,1.0,,,85.18,103.026,101.096,119.576,140.908
+usb-dual,response_size,2048,20,20,1.0,,,110.174,137.087,135.766,169.583,173.526
+usb-dual,request_data,0,20,20,1.0,,,5.573,8.368,7.492,11.537,14.771
+usb-dual,request_data,8,20,20,1.0,,,5.205,10.047,8.411,19.31,19.488
+usb-dual,request_data,16,20,1,0.05,timeout_no_bytes,"{""timeout_no_bytes"": 19}",13.815,13.815,13.815,13.815,13.815
+usb-dual,request_data,24,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 20}",,,,,
+usb-dual,request_data,28,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 20}",,,,,
+usb-dual,request_data,30,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 20}",,,,,

@@ -9,3 +9,4 @@ _codeql_detected_source_root
 .west
 *.local.json
 .claude/worktrees
+build-control/

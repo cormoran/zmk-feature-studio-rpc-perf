@@ -17,5 +17,10 @@ manifest:
       clone-depth: 1
     - name: zmk-west-commands
       remote: cormoran
-      revision: main
+      # Pinned to the USB-OUT-endpoint-rearm branch (cormoran PR #30) rather than
+      # main: it fixes a DualCdcAcmBridge model bug where only the FIRST
+      # device->host chunk per session was delivered (the re-arm was clobbered by
+      # HandlePacket's trailing dataCallback=null). The USB perf sweeps REQUIRE
+      # this fix to measure true limits; revert to `main` once #30 merges.
+      revision: claude/usb-out-endpoint-rearm
       import: true

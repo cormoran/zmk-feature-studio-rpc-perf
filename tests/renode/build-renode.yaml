@@ -1,0 +1,40 @@
+# Build matrix for the Renode transport benchmark (Phase 1: direct host-link
+# paths only). Build with the zmk-west-commands build command from the repo root
+# after `west update`, e.g.:
+#
+#   export ZEPHYR_SDK_INSTALL_DIR=/path/to/zephyr-sdk-0.16.8
+#   west zmk-build tests/zmk-config --build-yaml tests/renode/build-renode.yaml
+#
+# (the module root is auto-added as an extra Zephyr module). ELFs land in
+# <west topdir>/build/<artifact>/zephyr/zmk.elf. All three share the perf shield
+# my_awesome_keyboard on xiao_ble//zmk with Studio + the perf handler; they
+# differ only in the Studio TRANSPORT snippet(s):
+#
+#   perf_uart       -> renode-studio-uart : Studio rides an emulated UART
+#                      (no USB, no BLE). Drive with boot_single. This is the
+#                      classic path with the known ~30B custom-RPC TX stall.
+#   perf_usb_single -> studio-rpc-usb-uart, ONE CDC (Studio only): drive with
+#                      boot_single_real(usb repl) + attach_dual_cdc_bridge.
+#   perf_usb_dual   -> studio-rpc-usb-uart + zmk-usb-logging, TWO CDCs (console
+#                      + Studio): the second CDC's log traffic keeps the USB IN
+#                      pump cycling -- the hypothesis this benchmark tests.
+include:
+  - artifact: perf_uart
+    board: xiao_ble//zmk
+    shield: my_awesome_keyboard
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_STUDIO_RPC_PERF=y -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+    snippets:
+      - renode-studio-uart
+  - artifact: perf_usb_single
+    board: xiao_ble//zmk
+    shield: my_awesome_keyboard
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_STUDIO_RPC_PERF=y -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+    snippets:
+      - studio-rpc-usb-uart
+  - artifact: perf_usb_dual
+    board: xiao_ble//zmk
+    shield: my_awesome_keyboard
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_STUDIO_RPC_PERF=y -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+    snippets:
+      - studio-rpc-usb-uart
+      - zmk-usb-logging
