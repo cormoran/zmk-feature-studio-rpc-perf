@@ -1,0 +1,301 @@
+path,sweep,size,rep,latency_ms,status,detail
+usb-wired-relay-240,response_size,0,0,196.057,ok,
+usb-wired-relay-240,response_size,0,1,153.309,ok,
+usb-wired-relay-240,response_size,0,2,252.525,ok,
+usb-wired-relay-240,response_size,0,3,119.950,ok,
+usb-wired-relay-240,response_size,0,4,261.698,ok,
+usb-wired-relay-240,response_size,0,5,101.992,ok,
+usb-wired-relay-240,response_size,0,6,350.650,ok,
+usb-wired-relay-240,response_size,0,7,143.121,ok,
+usb-wired-relay-240,response_size,0,8,281.440,ok,
+usb-wired-relay-240,response_size,0,9,131.826,ok,
+usb-wired-relay-240,response_size,0,10,265.266,ok,
+usb-wired-relay-240,response_size,0,11,148.379,ok,
+usb-wired-relay-240,response_size,0,12,314.302,ok,
+usb-wired-relay-240,response_size,0,13,140.316,ok,
+usb-wired-relay-240,response_size,0,14,338.178,ok,
+usb-wired-relay-240,response_size,0,15,163.156,ok,
+usb-wired-relay-240,response_size,0,16,288.152,ok,
+usb-wired-relay-240,response_size,0,17,134.520,ok,
+usb-wired-relay-240,response_size,0,18,312.082,ok,
+usb-wired-relay-240,response_size,0,19,117.923,ok,
+usb-wired-relay-240,response_size,64,0,325.151,ok,
+usb-wired-relay-240,response_size,64,1,191.022,ok,
+usb-wired-relay-240,response_size,64,2,297.509,ok,
+usb-wired-relay-240,response_size,64,3,131.410,ok,
+usb-wired-relay-240,response_size,64,4,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,5,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,64,6,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,7,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,64,8,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,9,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,64,10,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,11,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,12,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,64,13,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,14,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,64,15,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,16,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,64,17,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,18,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,64,19,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,0,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,1,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,2,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,3,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,4,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,5,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,6,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,7,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,8,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,9,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,10,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,11,,error,Failed to decode request
+usb-wired-relay-240,response_size,116,12,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,13,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,14,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,15,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,16,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,116,17,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,116,18,,error,Failed to decode request
+usb-wired-relay-240,response_size,116,19,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,128,0,125.069,ok,
+usb-wired-relay-240,response_size,128,1,239.576,ok,
+usb-wired-relay-240,response_size,128,2,132.454,ok,
+usb-wired-relay-240,response_size,128,3,300.325,ok,
+usb-wired-relay-240,response_size,128,4,131.455,ok,
+usb-wired-relay-240,response_size,128,5,296.221,ok,
+usb-wired-relay-240,response_size,128,6,141.340,ok,
+usb-wired-relay-240,response_size,128,7,292.875,ok,
+usb-wired-relay-240,response_size,128,8,139.833,ok,
+usb-wired-relay-240,response_size,128,9,300.065,ok,
+usb-wired-relay-240,response_size,128,10,158.580,ok,
+usb-wired-relay-240,response_size,128,11,366.860,ok,
+usb-wired-relay-240,response_size,128,12,139.011,ok,
+usb-wired-relay-240,response_size,128,13,278.652,ok,
+usb-wired-relay-240,response_size,128,14,159.020,ok,
+usb-wired-relay-240,response_size,128,15,286.315,ok,
+usb-wired-relay-240,response_size,128,16,159.583,ok,
+usb-wired-relay-240,response_size,128,17,294.177,ok,
+usb-wired-relay-240,response_size,128,18,105.801,ok,
+usb-wired-relay-240,response_size,128,19,301.272,ok,
+usb-wired-relay-240,response_size,160,0,142.197,ok,
+usb-wired-relay-240,response_size,160,1,342.618,ok,
+usb-wired-relay-240,response_size,160,2,138.726,ok,
+usb-wired-relay-240,response_size,160,3,343.262,ok,
+usb-wired-relay-240,response_size,160,4,118.862,ok,
+usb-wired-relay-240,response_size,160,5,299.001,ok,
+usb-wired-relay-240,response_size,160,6,184.554,ok,
+usb-wired-relay-240,response_size,160,7,293.852,ok,
+usb-wired-relay-240,response_size,160,8,138.593,ok,
+usb-wired-relay-240,response_size,160,9,310.283,ok,
+usb-wired-relay-240,response_size,160,10,113.830,ok,
+usb-wired-relay-240,response_size,160,11,296.826,ok,
+usb-wired-relay-240,response_size,160,12,159.266,ok,
+usb-wired-relay-240,response_size,160,13,281.385,ok,
+usb-wired-relay-240,response_size,160,14,148.793,ok,
+usb-wired-relay-240,response_size,160,15,262.388,ok,
+usb-wired-relay-240,response_size,160,16,158.572,ok,
+usb-wired-relay-240,response_size,160,17,275.205,ok,
+usb-wired-relay-240,response_size,160,18,98.450,ok,
+usb-wired-relay-240,response_size,160,19,266.820,ok,
+usb-wired-relay-240,response_size,192,0,139.126,ok,
+usb-wired-relay-240,response_size,192,1,283.910,ok,
+usb-wired-relay-240,response_size,192,2,156.705,ok,
+usb-wired-relay-240,response_size,192,3,324.785,ok,
+usb-wired-relay-240,response_size,192,4,144.106,ok,
+usb-wired-relay-240,response_size,192,5,336.527,ok,
+usb-wired-relay-240,response_size,192,6,148.028,ok,
+usb-wired-relay-240,response_size,192,7,306.857,ok,
+usb-wired-relay-240,response_size,192,8,156.249,ok,
+usb-wired-relay-240,response_size,192,9,315.728,ok,
+usb-wired-relay-240,response_size,192,10,122.954,ok,
+usb-wired-relay-240,response_size,192,11,365.135,ok,
+usb-wired-relay-240,response_size,192,12,174.064,ok,
+usb-wired-relay-240,response_size,192,13,327.602,ok,
+usb-wired-relay-240,response_size,192,14,142.863,ok,
+usb-wired-relay-240,response_size,192,15,294.213,ok,
+usb-wired-relay-240,response_size,192,16,125.261,ok,
+usb-wired-relay-240,response_size,192,17,322.292,ok,
+usb-wired-relay-240,response_size,192,18,143.185,ok,
+usb-wired-relay-240,response_size,192,19,334.579,ok,
+usb-wired-relay-240,response_size,224,0,158.599,ok,
+usb-wired-relay-240,response_size,224,1,305.208,ok,
+usb-wired-relay-240,response_size,224,2,148.251,ok,
+usb-wired-relay-240,response_size,224,3,280.312,ok,
+usb-wired-relay-240,response_size,224,4,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,224,5,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,224,6,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,224,7,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,224,8,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,224,9,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,224,10,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,224,11,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,224,12,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,224,13,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,224,14,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,224,15,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,224,16,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,224,17,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,224,18,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,224,19,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,0,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,1,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,2,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,3,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,4,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,5,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,6,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,7,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,8,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,9,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,10,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,11,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,12,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,13,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,14,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,15,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,16,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,17,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,231,18,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,231,19,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,232,0,133.265,ok,
+usb-wired-relay-240,response_size,232,1,280.437,ok,
+usb-wired-relay-240,response_size,232,2,137.732,ok,
+usb-wired-relay-240,response_size,232,3,318.710,ok,
+usb-wired-relay-240,response_size,232,4,168.302,ok,
+usb-wired-relay-240,response_size,232,5,310.676,ok,
+usb-wired-relay-240,response_size,232,6,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,232,7,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,232,8,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,232,9,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,232,10,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,232,11,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,232,12,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,232,13,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,232,14,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,232,15,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,232,16,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,232,17,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,232,18,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,232,19,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,0,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,1,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,2,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,3,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,4,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,5,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,6,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,7,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,8,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,9,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,10,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,11,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,12,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,13,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,14,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,15,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,16,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,17,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,233,18,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,response_size,233,19,,error,Failed to process request: -11
+usb-wired-relay-240,response_size,234,0,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,1,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,2,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,3,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,4,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,5,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,6,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,7,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,8,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,9,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,10,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,11,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,12,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,13,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,14,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,15,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,16,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,17,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,18,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,234,19,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,0,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,1,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,2,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,3,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,4,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,5,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,6,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,7,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,8,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,9,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,10,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,11,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,12,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,13,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,14,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,15,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,16,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,17,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,18,,error,Failed to process request: -122
+usb-wired-relay-240,response_size,236,19,,error,Failed to process request: -122
+usb-wired-relay-240,request_data,0,0,117.503,ok,
+usb-wired-relay-240,request_data,0,1,291.272,ok,
+usb-wired-relay-240,request_data,0,2,142.446,ok,
+usb-wired-relay-240,request_data,0,3,300.397,ok,
+usb-wired-relay-240,request_data,0,4,111.536,ok,
+usb-wired-relay-240,request_data,0,5,270.283,ok,
+usb-wired-relay-240,request_data,0,6,116.762,ok,
+usb-wired-relay-240,request_data,0,7,283.771,ok,
+usb-wired-relay-240,request_data,0,8,122.102,ok,
+usb-wired-relay-240,request_data,0,9,282.489,ok,
+usb-wired-relay-240,request_data,0,10,129.574,ok,
+usb-wired-relay-240,request_data,0,11,337.421,ok,
+usb-wired-relay-240,request_data,0,12,134.087,ok,
+usb-wired-relay-240,request_data,0,13,282.308,ok,
+usb-wired-relay-240,request_data,0,14,108.759,ok,
+usb-wired-relay-240,request_data,0,15,306.706,ok,
+usb-wired-relay-240,request_data,0,16,141.714,ok,
+usb-wired-relay-240,request_data,0,17,301.117,ok,
+usb-wired-relay-240,request_data,0,18,129.139,ok,
+usb-wired-relay-240,request_data,0,19,333.814,ok,
+usb-wired-relay-240,request_data,4,0,162.609,ok,
+usb-wired-relay-240,request_data,4,1,307.963,ok,
+usb-wired-relay-240,request_data,4,2,90.150,ok,
+usb-wired-relay-240,request_data,4,3,294.529,ok,
+usb-wired-relay-240,request_data,4,4,103.896,ok,
+usb-wired-relay-240,request_data,4,5,252.563,ok,
+usb-wired-relay-240,request_data,4,6,147.577,ok,
+usb-wired-relay-240,request_data,4,7,280.177,ok,
+usb-wired-relay-240,request_data,4,8,142.129,ok,
+usb-wired-relay-240,request_data,4,9,310.193,ok,
+usb-wired-relay-240,request_data,4,10,106.846,ok,
+usb-wired-relay-240,request_data,4,11,289.554,ok,
+usb-wired-relay-240,request_data,4,12,124.197,ok,
+usb-wired-relay-240,request_data,4,13,309.317,ok,
+usb-wired-relay-240,request_data,4,14,108.502,ok,
+usb-wired-relay-240,request_data,4,15,303.776,ok,
+usb-wired-relay-240,request_data,4,16,157.503,ok,
+usb-wired-relay-240,request_data,4,17,302.489,ok,
+usb-wired-relay-240,request_data,4,18,92.403,ok,
+usb-wired-relay-240,request_data,4,19,325.267,ok,
+usb-wired-relay-240,request_data,8,0,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,1,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,2,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,3,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,4,106.955,ok,
+usb-wired-relay-240,request_data,8,5,103.268,ok,
+usb-wired-relay-240,request_data,8,6,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,7,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,8,115.670,ok,
+usb-wired-relay-240,request_data,8,9,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,10,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,11,107.100,ok,
+usb-wired-relay-240,request_data,8,12,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,13,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,14,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,15,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,16,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,17,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,18,,timeout_no_bytes,no bytes received
+usb-wired-relay-240,request_data,8,19,,timeout_no_bytes,no bytes received

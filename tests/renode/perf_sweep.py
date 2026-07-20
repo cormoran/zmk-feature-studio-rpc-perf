@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Headless Renode transport benchmark for the zmk__perf custom Studio RPC.
 
-For one transport PATH (uart | usb-single | usb-dual) this boots a perf image
-under Renode, queries the build's payload limits once (SettingsRequest), then
-sweeps the perf echo SIZE upward -- both the response_size (device->host / TX
+For one transport PATH (uart | usb-single | usb-dual | usb-wired-relay) this
+boots a perf image under Renode, queries the build's payload limits once
+(SettingsRequest), then sweeps the perf echo SIZE upward -- both the response_size (device->host / TX
 path) and the request data padding (host->device / RX path) -- measuring, per
 size over N repeats: round-trip latency (min/mean/median/p95/max) and stability
 (success rate + dominant failure reason: timeout/loss, ErrorResponse, or a
@@ -185,13 +185,23 @@ def read_perf_response(sock, codec, expected_seq, timeout):
 # --------------------------------------------------------------------------
 class PathSession:
     def __init__(
-        self, path, elf, renode, codec=None, boot_settle=8.0, boot_timeout=20.0
+        self,
+        path,
+        elf,
+        renode,
+        codec=None,
+        boot_settle=8.0,
+        boot_timeout=20.0,
+        peripheral_elf=None,
     ):
         self.path = path
         # MUST be absolute: Renode runs with cwd=SKILL_DIR (the harness dir), so a
         # relative `@bin` path would resolve there and LoadELF would silently fail
         # (the vector table never populates -> "image did not load").
         self.elf = Path(elf).resolve()
+        # Split-relay path only: the wired PERIPHERAL half whose perf handler
+        # answers relayed requests.
+        self.peripheral_elf = Path(peripheral_elf).resolve() if peripheral_elf else None
         self.renode = renode
         self.codec = codec  # used to auto-detect the Studio USB CDC channel
         self.boot_settle = boot_settle
@@ -211,6 +221,8 @@ class PathSession:
             self._boot_uart()
         elif self.path in ("usb-single", "usb-dual"):
             self._boot_usb()
+        elif self.path == "usb-wired-relay":
+            self._boot_usb_wired_relay()
         else:
             raise ValueError(f"unknown path {self.path}")
 
@@ -415,6 +427,60 @@ class PathSession:
         candidates = [cdc0, cdc1] if self.dual_cdc else [cdc0]
         self.studio = self._detect_studio_channel(candidates)
 
+    def _boot_usb_wired_relay(self):
+        """Boot the usb-host + wired-split PAIR: central answers Studio over USB
+        CDC and relays PerfRequest{split=true} to the wired peripheral (and its
+        response back). Uses zmk-west-commands' boot_usb_wired_split (cormoran
+        PR #29): two machines cross-connected on uart1 through a UART hub, the
+        central on the real USB repl, VectorTableOffset set on both CPUs by
+        platforms/usb_wired_split.resc, the central's NVS preloaded, `start`
+        issued -- so we only attach the host CDC bridge to the central here,
+        exactly as the single-machine usb path does."""
+        import re
+
+        pb = self._port_base()
+        session, console, p_console = rh.boot_usb_wired_split(
+            self.renode,
+            self.elf,
+            self.peripheral_elf,
+            boot_wait=3.0,
+            port_base=pb,
+        )
+        self.session = session
+        self._verify_live()  # central CPU executing (the selected machine)
+        self._extra_socks = [console, p_console]
+        # Let the central finish USB bring-up before attaching the host bridge.
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < self.boot_settle:
+            rh.drain_text(console._sock, timeout=0.5)
+        cdc0, cdc1 = rh.attach_dual_cdc_bridge(session, pb + 4, pb + 5)
+        self._extra_socks += [cdc0, cdc1]
+        mon = session.mon
+
+        def flag(cmd):
+            text = re.sub(r"\x1b\[[0-9;]*m", "", mon.execute(cmd, settle=0.3))
+            for line in text.splitlines():
+                line = line.strip()
+                if line in ("True", "False"):
+                    return line == "True"
+            return None
+
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if flag("sysbus.bridge_cdc0 IsWired"):
+                break
+        else:
+            raise RuntimeError(
+                "usb-wired-relay: enumeration never wired cdc0 "
+                "(is the central a USB-CDC Studio image?)"
+            )
+        # The central shield disables the board console CDC, so Studio rides the
+        # single cdc0. Keep the dual-CDC probe for robustness anyway.
+        self.dual_cdc = bool(flag("sysbus.bridge_cdc1 IsWired"))
+        time.sleep(2.0)
+        candidates = [cdc0, cdc1] if self.dual_cdc else [cdc0]
+        self.studio = self._detect_studio_channel(candidates)
+
     def _detect_studio_channel(self, candidates):
         """Return the CDC socket that answers a minimal perf request. Falls back
         to the first candidate if none answers within the probe window (so
@@ -502,14 +568,25 @@ class Sweeper:
         timeout,
         recover=True,
         reboot_per_request=False,
+        peripheral_elf=None,
+        split=False,
+        label=None,
     ):
         self.path = path
+        # Output-file prefix + the CSV "path" column value. Defaults to `path`,
+        # but lets two builds of the same transport path (e.g. the split relay at
+        # DATA_LEN 128 vs 240) write to distinct result files.
+        self.label = label or path
         self.elf = elf
         self.renode = renode
         self.codec = codec
         self.repeats = repeats
         self.timeout = timeout
         self.recover = recover
+        # usb-wired-relay only: the peripheral half + route perf requests through
+        # the split relay (PerfRequest.split=true).
+        self.peripheral_elf = peripheral_elf
+        self.split = split
         # reboot_per_request: reboot before EVERY measurement so each rep is the
         # first RPC after a fresh boot. Required for the uart custom-RPC path,
         # whose TX ring wedges permanently after ~1 response under Renode -- so
@@ -547,11 +624,11 @@ class Sweeper:
             return
         import csv as _csv
 
-        with (self.out_dir / f"{self.path}_raw.csv").open("w", newline="") as f:
+        with (self.out_dir / f"{self.label}_raw.csv").open("w", newline="") as f:
             w = _csv.DictWriter(f, fieldnames=self.RAW_FIELDS)
             w.writeheader()
             w.writerows(self.raw_rows)
-        with (self.out_dir / f"{self.path}_summary.csv").open("w", newline="") as f:
+        with (self.out_dir / f"{self.label}_summary.csv").open("w", newline="") as f:
             w = _csv.DictWriter(f, fieldnames=self.SUMM_FIELDS)
             w.writeheader()
             w.writerows(self.summaries)
@@ -575,7 +652,11 @@ class Sweeper:
         if self.sess is None:
             for attempt in range(3):
                 self.sess = PathSession(
-                    self.path, self.elf, self.renode, codec=self.codec
+                    self.path,
+                    self.elf,
+                    self.renode,
+                    codec=self.codec,
+                    peripheral_elf=self.peripheral_elf,
                 )
                 try:
                     self.sess.boot()
@@ -610,7 +691,13 @@ class Sweeper:
             self.sess.stop()
         self.sess = None
         for attempt in range(tries):
-            self.sess = PathSession(self.path, self.elf, self.renode, codec=self.codec)
+            self.sess = PathSession(
+                self.path,
+                self.elf,
+                self.renode,
+                codec=self.codec,
+                peripheral_elf=self.peripheral_elf,
+            )
             try:
                 self.sess.boot()
                 return
@@ -629,7 +716,11 @@ class Sweeper:
         """Single round trip; returns (latency_ms_or_None, status, detail)."""
         req_id, seq = self._next_ids()
         payload = self.codec.perf_request(
-            req_id, seq, response_size=response_size, request_data_size=request_size
+            req_id,
+            seq,
+            response_size=response_size,
+            request_data_size=request_size,
+            split=self.split,
         )
         sock = self.sess.studio._sock
         # drain any stale bytes so a prior notification doesn't taint timing
@@ -648,8 +739,18 @@ class Sweeper:
         res = read_perf_response(sock, self.codec, seq, self.timeout)
         t1 = time.perf_counter()
         if res["status"] == "perf":
-            got = len(res["message"].data)
+            msg = res["message"]
+            got = len(msg.data)
             detail = "" if got == min(response_size, 2048) else f"data_len={got}"
+            # For the split-relay path, a genuine relayed round trip MUST come
+            # back with split=true and a nonzero source (peripheral id+1). If it
+            # doesn't, the central answered locally (relay NOT exercised) -- flag
+            # it so the summary can't silently pass on a non-relay answer.
+            if self.split and not (msg.split and msg.source):
+                detail = (
+                    f"{detail + ';' if detail else ''}"
+                    f"not_relayed(split={msg.split},source={msg.source})"
+                )
             return (t1 - t0) * 1000.0, "ok", detail
         if res["status"] == "error":
             return None, "error", res["message"].message
@@ -716,7 +817,7 @@ class Sweeper:
                 lat, status, detail = self.one_request(resp, reqs)
                 self.raw_rows.append(
                     {
-                        "path": self.path,
+                        "path": self.label,
                         "sweep": sweep_name,
                         "size": size,
                         "rep": rep,
@@ -733,7 +834,7 @@ class Sweeper:
             fail_reasons = {k: v for k, v in statuses.items() if k != "ok"}
             dominant = max(fail_reasons, key=fail_reasons.get) if fail_reasons else ""
             summary = {
-                "path": self.path,
+                "path": self.label,
                 "sweep": sweep_name,
                 "size": size,
                 "n": n,
@@ -792,7 +893,7 @@ class Sweeper:
     def _skipped_summary(self, sweep_name, size):
         self.raw_rows.append(
             {
-                "path": self.path,
+                "path": self.label,
                 "sweep": sweep_name,
                 "size": size,
                 "rep": 0,
@@ -802,7 +903,7 @@ class Sweeper:
             }
         )
         return {
-            "path": self.path,
+            "path": self.label,
             "sweep": sweep_name,
             "size": size,
             "n": 0,
@@ -844,6 +945,12 @@ class Sweeper:
                     "perf_response_data_max_bytes": m.perf_response_data_max_bytes,
                     "split_relay_enabled": m.split_relay_enabled,
                     "split_relay_event_data_len": m.split_relay_event_data_len,
+                    "split_relay_request_data_max_bytes": (
+                        m.split_relay_request_data_max_bytes
+                    ),
+                    "split_relay_response_data_max_bytes": (
+                        m.split_relay_response_data_max_bytes
+                    ),
                 }
             time.sleep(0.5)
         return None
@@ -879,10 +986,23 @@ def breakpoint_size(summaries, threshold=0.95):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--path", required=True, choices=["uart", "usb-single", "usb-dual"])
-    ap.add_argument("--elf", required=True)
+    ap.add_argument(
+        "--path",
+        required=True,
+        choices=["uart", "usb-single", "usb-dual", "usb-wired-relay"],
+    )
+    ap.add_argument("--elf", required=True, help="central/single ELF")
+    ap.add_argument(
+        "--peripheral-elf",
+        help="wired-split peripheral ELF (required for usb-wired-relay)",
+    )
     ap.add_argument(
         "--out-dir", default=str(Path(__file__).resolve().parent / "results")
+    )
+    ap.add_argument(
+        "--label",
+        help="output-file prefix (defaults to --path); use to keep two builds of "
+        "the same path -- e.g. the split relay at DATA_LEN 128 vs 240 -- distinct",
     )
     ap.add_argument("--repeats", type=int, default=20)
     ap.add_argument("--timeout", type=float, default=4.0)
@@ -910,19 +1030,65 @@ def main(argv=None):
     if not elf.is_file():
         print(f"ELF not found: {elf}", file=sys.stderr)
         return 2
+    split = args.path == "usb-wired-relay"
+    peripheral_elf = Path(args.peripheral_elf) if args.peripheral_elf else None
+    if split:
+        if peripheral_elf is None:
+            print("usb-wired-relay requires --peripheral-elf", file=sys.stderr)
+            return 2
+        if not peripheral_elf.is_file():
+            print(f"peripheral ELF not found: {peripheral_elf}", file=sys.stderr)
+            return 2
 
     studio_pb2, custom_pb2, perf_pb2 = perf_framing.load_protos(rh)
     codec = perf_framing.PerfCodec(studio_pb2, custom_pb2, perf_pb2)
 
+    # The split-relay response is capped by the relay RESPONSE payload
+    # (DATA_LEN - 7 header; ~121 B at the default DATA_LEN=128, ~233 B at 240),
+    # so sweep tightly around those caps rather than out to the 2048 nanopb cap.
+    # The relay REQUEST data max (DATA_LEN - 9) is larger, but the host->central
+    # request is itself capped by the 30 B Studio RX ring (Phase 1: RX breakpoint
+    # 8 B), so the request sweep breaks at the host-link ring, not the relay.
+    relay_resp_default = [
+        0,
+        8,
+        16,
+        32,
+        48,
+        64,
+        96,
+        112,
+        116,
+        118,
+        119,
+        120,
+        121,
+        122,
+        124,
+        128,
+        160,
+        192,
+        224,
+        231,
+        232,
+        233,
+        234,
+        236,
+        240,
+    ]
+    relay_req_default = [0, 8, 16, 24, 28, 30, 31, 32, 40, 48, 64]
+
+    resp_default = relay_resp_default if split else DEFAULT_RESPONSE_SIZES
+    req_default = relay_req_default if split else DEFAULT_REQUEST_SIZES
     resp_sizes = (
         [int(x) for x in args.response_sizes.split(",")]
         if args.response_sizes
-        else DEFAULT_RESPONSE_SIZES
+        else resp_default
     )
     req_sizes = (
         [int(x) for x in args.request_sizes.split(",")]
         if args.request_sizes
-        else DEFAULT_REQUEST_SIZES
+        else req_default
     )
 
     out_dir = Path(args.out_dir)
@@ -942,13 +1108,19 @@ def main(argv=None):
         args.timeout,
         recover=not args.no_recover,
         reboot_per_request=reboot_per_request,
+        peripheral_elf=peripheral_elf,
+        split=split,
+        label=args.label,
     )
+    label = args.label or args.path
     sweeper.out_dir = out_dir  # enable per-size incremental CSV flushing
     result_reboot_mode = reboot_per_request
     wall0 = time.time()
     result = {
-        "path": args.path,
+        "path": label,
         "elf": str(elf),
+        "peripheral_elf": str(peripheral_elf) if peripheral_elf else None,
+        "split": split,
         "repeats": args.repeats,
         "reboot_per_request": result_reboot_mode,
     }
@@ -957,7 +1129,7 @@ def main(argv=None):
         settings = sweeper.query_settings()
         result["settings"] = settings
         # Persist settings immediately so they survive a mid-sweep kill.
-        (out_dir / f"{args.path}_result.json").write_text(json.dumps(result, indent=2))
+        (out_dir / f"{label}_result.json").write_text(json.dumps(result, indent=2))
         print(f"[{args.path}] settings: {settings}", file=sys.stderr)
 
         print(f"[{args.path}] response-size (TX) sweep...", file=sys.stderr)
@@ -973,7 +1145,7 @@ def main(argv=None):
     result["summary"] = all_summ
     result["wall_seconds"] = round(time.time() - wall0, 1)
 
-    raw_csv = out_dir / f"{args.path}_raw.csv"
+    raw_csv = out_dir / f"{label}_raw.csv"
     with raw_csv.open("w", newline="") as f:
         w = csv.DictWriter(
             f,
@@ -990,7 +1162,7 @@ def main(argv=None):
         w.writeheader()
         w.writerows(sweeper.raw_rows)
 
-    summ_csv = out_dir / f"{args.path}_summary.csv"
+    summ_csv = out_dir / f"{label}_summary.csv"
     with summ_csv.open("w", newline="") as f:
         w = csv.DictWriter(
             f,
@@ -1013,7 +1185,7 @@ def main(argv=None):
         w.writeheader()
         w.writerows(all_summ)
 
-    json_path = out_dir / f"{args.path}_result.json"
+    json_path = out_dir / f"{label}_result.json"
     json_path.write_text(json.dumps(result, indent=2))
 
     print(

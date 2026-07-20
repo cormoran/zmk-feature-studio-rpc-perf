@@ -11,16 +11,25 @@ manifest:
       revision: main
     - name: zmk
       remote: cormoran
-      revision: main+custom-studio-protocol
+      # Phase 2 (split-relay sweep) pins the WIRED split relay-event transport
+      # branch (cormoran/zmk PR #34, claude/wired-split-relay), which carries the
+      # custom-studio-protocol base AND the wired ZMK_SPLIT_RELAY_EVENT transport
+      # the perf split relay rides. Revert to main+custom-studio-protocol once #34
+      # merges. (Phase 1's direct host-link sweeps are unaffected by this base.)
+      revision: claude/wired-split-relay
       import:
         file: app/west.yml
       clone-depth: 1
     - name: zmk-west-commands
       remote: cormoran
-      # Pinned to the USB-OUT-endpoint-rearm branch (cormoran PR #30) rather than
-      # main: it fixes a DualCdcAcmBridge model bug where only the FIRST
-      # device->host chunk per session was delivered (the re-arm was clobbered by
-      # HandlePacket's trailing dataCallback=null). The USB perf sweeps REQUIRE
-      # this fix to measure true limits; revert to `main` once #30 merges.
-      revision: claude/usb-out-endpoint-rearm
+      # Pin the orthogonal host-link/split-link Renode branch (cormoran PR #29,
+      # claude/renode-transport-orthogonal). #29 CONSOLIDATES the three previously
+      # separate PRs into one branch: boot_usb_wired_split + the usb x wired
+      # harness (was #29) + platforms/usb_wired_split.resc, the DualCdcAcmBridge
+      # device->host re-arm fix (was #30, now closed), AND the VectorTableOffset
+      # boot fix (was #31, now closed). So this single branch carries everything
+      # BOTH phases need -- do NOT also pin #30/#31 (their commits are all here).
+      # It provides the exact usb-host + wired-split-relay boot the Phase 2 sweep
+      # drives. Revert to `main` once #29 merges.
+      revision: claude/renode-transport-orthogonal
       import: true

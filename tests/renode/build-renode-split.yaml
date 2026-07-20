@@ -1,0 +1,54 @@
+# Build matrix for the Renode transport benchmark -- Phase 2: the SPLIT-RELAY
+# path over a USB host-link + WIRED split-link central (see
+# docs/renode-perf-sweep.md "Phase 2"). Build from the repo root after
+# `west update`, e.g.:
+#
+#   export ZEPHYR_SDK_INSTALL_DIR=/path/to/zephyr-sdk-0.16.8
+#   west zmk-build tests/zmk-config --build-yaml tests/renode/build-renode-split.yaml
+#
+# ELFs land in <west topdir>/build/<artifact>/zephyr/zmk.elf. This drives the
+# `usb-wired-relay` path of tests/renode/perf_sweep.py: a Studio host talks to
+# the CENTRAL over USB CDC, and PerfRequest{split=true} is relayed central ->
+# peripheral (request) and peripheral -> central (response) over the WIRED split
+# event relay. A green split=true round trip runtime-validates cormoran/zmk#34
+# (wired split relay-event transport).
+#
+# Topology (mirrors the pmw3610 module's usb+wired relay stack):
+#   host(USB CDC) --USB(Studio)--> CENTRAL --wired(split relay)--> PERIPHERAL
+#
+# central  = renode_usb_wired_split shield (Studio over USB, console on uart0,
+#            zmk,wired-split on uart1, BLE off), role central, perf handler +
+#            perf split RPC relay (central side). Boots the real USB image on
+#            xiao_nrf52840_usb.repl.
+# peripheral = renode_wired_split shield (console uart0, wired split uart1,
+#            USB/BLE off), role peripheral, perf split RPC relay (peripheral
+#            side) so its handler answers relayed requests. No Studio.
+#
+# The `_relay240` pair rebuilds both halves with
+# CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN=240 (default is 128) to widen the relay
+# payload caps -- DATA_LEN is a shared wire contract, so it MUST match on both
+# halves. Used to measure the effect of bumping the relay event data length.
+include:
+  # ---- default relay event data len (128) ----------------------------------
+  - artifact: perf_usb_wired_central
+    board: xiao_ble//zmk
+    shield: renode_usb_wired_split
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_STUDIO_RPC_PERF=y -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
+    snippets:
+      - studio-rpc-usb-uart
+  - artifact: perf_usb_wired_peripheral
+    board: xiao_ble//zmk
+    shield: renode_wired_split
+    cmake-args: -DCONFIG_ZMK_STUDIO_RPC_PERF=y -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
+
+  # ---- bumped relay event data len (240) -----------------------------------
+  - artifact: perf_usb_wired_central_relay240
+    board: xiao_ble//zmk
+    shield: renode_usb_wired_split
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_STUDIO_RPC_PERF=y -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y -DCONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN=240
+    snippets:
+      - studio-rpc-usb-uart
+  - artifact: perf_usb_wired_peripheral_relay240
+    board: xiao_ble//zmk
+    shield: renode_wired_split
+    cmake-args: -DCONFIG_ZMK_STUDIO_RPC_PERF=y -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y -DCONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN=240

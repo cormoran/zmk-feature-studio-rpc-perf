@@ -1,0 +1,16 @@
+path,sweep,size,n,ok,success_rate,dominant_failure,failures,lat_min_ms,lat_mean_ms,lat_median_ms,lat_p95_ms,lat_max_ms
+usb-wired-relay-240,response_size,0,20,20,1.0,,,101.992,210.742,179.607,338.178,350.65
+usb-wired-relay-240,response_size,64,20,4,0.2,timeout_no_bytes,"{""timeout_no_bytes"": 9, ""error"": 7}",131.41,236.273,244.266,325.151,325.151
+usb-wired-relay-240,response_size,116,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 10, ""error"": 10}",,,,,
+usb-wired-relay-240,response_size,128,20,20,1.0,,,105.801,217.424,199.579,301.272,366.86
+usb-wired-relay-240,response_size,160,20,20,1.0,,,98.45,218.674,223.471,342.618,343.262
+usb-wired-relay-240,response_size,192,20,20,1.0,,,122.954,233.208,228.987,336.527,365.135
+usb-wired-relay-240,response_size,224,20,4,0.2,timeout_no_bytes,"{""timeout_no_bytes"": 8, ""error"": 8}",148.251,223.093,219.456,305.208,305.208
+usb-wired-relay-240,response_size,231,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 10, ""error"": 10}",,,,,
+usb-wired-relay-240,response_size,232,20,6,0.3,timeout_no_bytes,"{""timeout_no_bytes"": 7, ""error"": 7}",133.265,224.854,224.369,318.71,318.71
+usb-wired-relay-240,response_size,233,20,0,0.0,timeout_no_bytes,"{""timeout_no_bytes"": 10, ""error"": 10}",,,,,
+usb-wired-relay-240,response_size,234,20,0,0.0,error,"{""error"": 20}",,,,,
+usb-wired-relay-240,response_size,236,20,0,0.0,error,"{""error"": 20}",,,,,
+usb-wired-relay-240,request_data,0,20,20,1.0,,,108.759,212.16,206.365,333.814,337.421
+usb-wired-relay-240,request_data,4,20,20,1.0,,,90.15,210.582,207.586,310.193,325.267
+usb-wired-relay-240,request_data,8,20,4,0.2,timeout_no_bytes,"{""timeout_no_bytes"": 16}",103.268,108.248,107.028,115.67,115.67

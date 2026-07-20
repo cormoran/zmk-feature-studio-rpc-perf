@@ -7,8 +7,14 @@ it sweeps the perf echo **size** upward and records, per size, the round-trip
 **latency** (min/mean/median/p95/max) and **stability** (success rate over N
 repeats + the dominant failure reason).
 
-This is **Phase 1**: the direct host-link paths only (`split=false`). It is a
-manual analysis tool — **not** wired into CI.
+It is a manual analysis tool — **not** wired into CI.
+
+- **Phase 1**: the direct host-link paths (`split=false`) — `uart`, `usb-single`,
+  `usb-dual`.
+- **Phase 2**: the split-relay path (`split=true`) — `usb-wired-relay`: a Studio
+  host talks to the split CENTRAL over USB and each perf request is relayed to
+  the wired PERIPHERAL and its response relayed back. This runtime-validates
+  cormoran/zmk#34 (the wired split relay-event transport).
 
 ## What it measures
 
@@ -17,6 +23,7 @@ manual analysis tool — **not** wired into CI.
 | `uart` | `renode-studio-uart` | Studio RPC over an emulated UART | `boot_single` |
 | `usb-single` | `studio-rpc-usb-uart` | one USB CDC (Studio only) | `boot_single_real` + `attach_dual_cdc_bridge` |
 | `usb-dual` | `studio-rpc-usb-uart` + `zmk-usb-logging` | two USB CDC (console + Studio) | same, Studio = 2nd CDC |
+| `usb-wired-relay` | central `renode_usb_wired_split` + `studio-rpc-usb-uart`; peripheral `renode_wired_split` | Studio over USB CDC on the central; perf request/response **relayed over the wired split** to/from the peripheral | `boot_usb_wired_split` + `attach_dual_cdc_bridge` |
 
 Two sweeps per path:
 - **response_size (TX / device→host):** grow the echoed response, tiny request.
@@ -34,6 +41,10 @@ sizes, the custom-subsystem request-payload cap, and the perf data caps).
   module Renode pattern.
 - `perf_sweep.py` — the sweep driver (boot per path, sweep, emit CSV + JSON).
 - `build-renode.yaml` — the three Phase-1 build targets.
+- `build-renode-split.yaml` — the Phase-2 split-relay build targets: the
+  `usb-wired` central/peripheral pair at the default `CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN`
+  (128) and a `_relay240` pair at 240 (the max the wired split's 8-bit envelope
+  admits).
 - `results/` — committed CSV + JSON outputs.
 - [`../../docs/renode-perf-sweep.md`](../../docs/renode-perf-sweep.md) — the
   analysis writeup (breakpoints, latency, verdicts).
@@ -56,6 +67,31 @@ python3 tests/renode/perf_sweep.py --path usb-single \
 python3 tests/renode/perf_sweep.py --path usb-dual \
     --elf build/perf_usb_dual/zephyr/zmk.elf --out-dir tests/renode/results
 ```
+
+### Phase 2: the split-relay path (`split=true`)
+
+```bash
+# Build both halves of the usb+wired split (default + bumped relay data len).
+west zmk-build tests/zmk-config --build-yaml tests/renode/build-renode-split.yaml
+
+# DATA_LEN=128 (default): host timeout MUST exceed the firmware relay timeout
+# (CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_TIMEOUT_MS, default 10 s) or a slow relay is
+# abandoned host-side and its late response taints the next request.
+python3 tests/renode/perf_sweep.py --path usb-wired-relay --label usb-wired-relay \
+    --elf build/perf_usb_wired_central/zephyr/zmk.elf \
+    --peripheral-elf build/perf_usb_wired_peripheral/zephyr/zmk.elf \
+    --timeout 12 --out-dir tests/renode/results
+
+# DATA_LEN=240 (bumped) — same driver, the _relay240 pair + a distinct --label:
+python3 tests/renode/perf_sweep.py --path usb-wired-relay --label usb-wired-relay-240 \
+    --elf build/perf_usb_wired_central_relay240/zephyr/zmk.elf \
+    --peripheral-elf build/perf_usb_wired_peripheral_relay240/zephyr/zmk.elf \
+    --timeout 12 --out-dir tests/renode/results
+```
+
+A green `split=true` round trip (response carries `split=true` + a nonzero
+`source`) runtime-validates cormoran/zmk#34's wired split relay in **both**
+directions (central→peripheral request, peripheral→central response).
 
 The workspace is initialised standalone (its own `.west/config` with
 `path = west`, `file = west-test-standalone.yml`, `base = dependencies/zephyr`)
