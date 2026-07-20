@@ -14,6 +14,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 
 #include <zmk/event_manager.h>
@@ -31,23 +32,27 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #if IS_ENABLED(CONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY)
 
-struct zmk_perf_split_relay_request_header {
-    uint8_t source;
-    uint32_t sequence_number;
-    uint16_t response_size;
-    uint16_t data_size;
-} __packed;
-
-struct zmk_perf_split_relay_response_header {
-    uint8_t source;
-    uint32_t sequence_number;
-    uint16_t data_size;
-} __packed;
+/*
+ * The structs below are the in-RAM representation of a relayed perf request /
+ * response. Only the header plus the *used* payload bytes are put on the wire by
+ * the serialize helpers, so a message carrying N payload bytes costs
+ * header + N bytes instead of the full CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN that
+ * a plain struct memcpy relay would always send.
+ *
+ * Request wire layout:  [sequence_number: u32 LE][response_size: u16 LE][data...]
+ * Response wire layout: [sequence_number: u32 LE][data...]
+ *
+ * data_size is recovered from the relayed payload length, so it is not on the
+ * wire. `source` is managed by the relay framework (set from the transport source
+ * on receipt), so it is not serialized either.
+ */
+#define PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE (sizeof(uint32_t) + sizeof(uint16_t))
+#define PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE (sizeof(uint32_t))
 
 #define PERF_SPLIT_RELAY_REQUEST_DATA_SIZE                                                         \
-    (CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN - sizeof(struct zmk_perf_split_relay_request_header))
+    (CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN - PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE)
 #define PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE                                                        \
-    (CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN - sizeof(struct zmk_perf_split_relay_response_header))
+    (CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN - PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE)
 
 struct zmk_perf_split_relay_request {
     uint8_t source;
@@ -55,22 +60,18 @@ struct zmk_perf_split_relay_request {
     uint16_t response_size;
     uint16_t data_size;
     uint8_t data[PERF_SPLIT_RELAY_REQUEST_DATA_SIZE];
-} __packed;
+};
 
 struct zmk_perf_split_relay_response {
     uint8_t source;
     uint32_t sequence_number;
     uint16_t data_size;
     uint8_t data[PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE];
-} __packed;
+};
 
 BUILD_ASSERT(PERF_SPLIT_RELAY_REQUEST_DATA_SIZE > 0,
              "CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN is too small for perf relay requests");
 BUILD_ASSERT(PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE > 0,
-             "CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN is too small for perf relay responses");
-BUILD_ASSERT(sizeof(struct zmk_perf_split_relay_request) <= CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN,
-             "CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN is too small for perf relay requests");
-BUILD_ASSERT(sizeof(struct zmk_perf_split_relay_response) <= CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN,
              "CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN is too small for perf relay responses");
 
 ZMK_EVENT_DECLARE(zmk_perf_split_relay_request);
@@ -78,10 +79,64 @@ ZMK_EVENT_DECLARE(zmk_perf_split_relay_response);
 ZMK_EVENT_IMPL(zmk_perf_split_relay_request);
 ZMK_EVENT_IMPL(zmk_perf_split_relay_response);
 
-ZMK_RELAY_EVENT_HANDLE(zmk_perf_split_relay_request, zpr, source);
-ZMK_RELAY_EVENT_HANDLE(zmk_perf_split_relay_response, zps, source);
-ZMK_RELAY_EVENT_CENTRAL_TO_PERIPHERAL(zmk_perf_split_relay_request, zpr, source);
-ZMK_RELAY_EVENT_PERIPHERAL_TO_CENTRAL(zmk_perf_split_relay_response, zps, source);
+static int perf_split_relay_request_deserialize(struct zmk_perf_split_relay_request *ev,
+                                                const uint8_t *event_data, size_t size) {
+    if (size < PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE ||
+        size - PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE > sizeof(ev->data)) {
+        return -EMSGSIZE;
+    }
+    ev->sequence_number = sys_get_le32(event_data);
+    ev->response_size = sys_get_le16(event_data + sizeof(uint32_t));
+    ev->data_size = size - PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE;
+    memcpy(ev->data, event_data + PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE, ev->data_size);
+    return 0;
+}
+
+static int perf_split_relay_response_deserialize(struct zmk_perf_split_relay_response *ev,
+                                                 const uint8_t *event_data, size_t size) {
+    if (size < PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE ||
+        size - PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE > sizeof(ev->data)) {
+        return -EMSGSIZE;
+    }
+    ev->sequence_number = sys_get_le32(event_data);
+    ev->data_size = size - PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE;
+    memcpy(ev->data, event_data + PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE, ev->data_size);
+    return 0;
+}
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+static int perf_split_relay_request_serialize(const struct zmk_perf_split_relay_request *ev,
+                                              uint8_t *event_data, size_t max_size) {
+    if (ev->data_size > PERF_SPLIT_RELAY_REQUEST_DATA_SIZE ||
+        PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE + ev->data_size > max_size) {
+        return -EMSGSIZE;
+    }
+    sys_put_le32(ev->sequence_number, event_data);
+    sys_put_le16(ev->response_size, event_data + sizeof(uint32_t));
+    memcpy(event_data + PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE, ev->data, ev->data_size);
+    return PERF_SPLIT_RELAY_REQUEST_HEADER_SIZE + ev->data_size;
+}
+#else
+static int perf_split_relay_response_serialize(const struct zmk_perf_split_relay_response *ev,
+                                               uint8_t *event_data, size_t max_size) {
+    if (ev->data_size > PERF_SPLIT_RELAY_RESPONSE_DATA_SIZE ||
+        PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE + ev->data_size > max_size) {
+        return -EMSGSIZE;
+    }
+    sys_put_le32(ev->sequence_number, event_data);
+    memcpy(event_data + PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE, ev->data, ev->data_size);
+    return PERF_SPLIT_RELAY_RESPONSE_HEADER_SIZE + ev->data_size;
+}
+#endif
+
+ZMK_RELAY_EVENT_HANDLE_DESERIALIZE(zmk_perf_split_relay_request, zpr, source,
+                                   perf_split_relay_request_deserialize);
+ZMK_RELAY_EVENT_HANDLE_DESERIALIZE(zmk_perf_split_relay_response, zps, source,
+                                   perf_split_relay_response_deserialize);
+ZMK_RELAY_EVENT_CENTRAL_TO_PERIPHERAL_SERIALIZE(zmk_perf_split_relay_request, zpr, source,
+                                                perf_split_relay_request_serialize);
+ZMK_RELAY_EVENT_PERIPHERAL_TO_CENTRAL_SERIALIZE(zmk_perf_split_relay_response, zps, source,
+                                                perf_split_relay_response_serialize);
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) && IS_ENABLED(CONFIG_ZMK_STUDIO_RPC_PERF_HANDLER)
 
