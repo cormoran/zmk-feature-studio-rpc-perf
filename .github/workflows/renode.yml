@@ -1,0 +1,67 @@
+name: Renode Test
+
+# Boots the perf module's firmware in the Renode emulator (no hardware) and
+# drives the custom `zmk__perf` Studio RPC over each supported transport,
+# asserting a stable stream of correct perf responses. See tests/renode/perf_test.py
+# and the "Renode testing" section of the README (incl. the mode support table).
+#
+# Only the modes the perf RPC round trip works in today run here:
+#   * usb         -- non-split perf over the DUT's USB CDC.
+#   * wired-split -- perf relayed to the split peripheral over the wired link.
+# ble / ble-split are not yet drivable for a custom RPC from the test harness
+# (renode-ble-host only does GetDeviceInfo / an encrypted GATT read) -- tracked
+# upstream in zmk-west-commands. See the README support table.
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - ".github/workflows/copilot-setup-steps.yml"
+      - ".github/workflows/web-ui.yml"
+      - ".github/actions/zmk-env/**"
+      - ".github/actions/west-init/**"
+      - ".gitignore"
+      - "web/**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  renode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: zmkfirmware/zmk-build-arm:stable
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: usb
+            build-filter: perf-usb
+            elf-path: build/perf-usb/zephyr/zmk.elf
+            peripheral-elf: ""
+          - mode: wired-split
+            build-filter: perf-wired
+            elf-path: build/perf-wired-central/zephyr/zmk.elf
+            peripheral-elf: build/perf-wired-peripheral/zephyr/zmk.elf
+    name: "Renode (${{ matrix.mode }})"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: ./.github/actions/west-init
+      - name: Build firmware (${{ matrix.mode }})
+        # -d build keeps the ELF(s) under $GITHUB_WORKSPACE (the west topdir), where
+        # the renode-test action resolves elf-path/peripheral-elf. -af <filter>
+        # selects this mode's artifact(s) from build-renode.yaml.
+        run: >-
+          west zmk-build tests/zmk-config
+          --build-yaml tests/zmk-config/build-renode.yaml
+          -af ${{ matrix.build-filter }} -d build
+      - name: Renode perf test (${{ matrix.mode }})
+        uses: cormoran/zmk-west-commands/.github/actions/zmk-renode-test@main
+        with:
+          mode: ${{ matrix.mode }}
+          elf-path: ${{ matrix.elf-path }}
+          peripheral-elf: ${{ matrix.peripheral-elf }}
+          tests: tests/renode

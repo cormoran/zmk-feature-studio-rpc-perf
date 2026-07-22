@@ -9,11 +9,13 @@ config ZMK_STUDIO_RPC_PERF_HANDLER
 
 config ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY
     bool "Relay Studio RPC performance requests across split halves"
-    depends on ZMK_SPLIT && ZMK_SPLIT_BLE
+    depends on ZMK_SPLIT
     select ZMK_SPLIT_RELAY_EVENT
     help
       Relays performance RPC requests from the central side to split
       peripherals, and relays performance responses back to the central side.
+      Works over both the BLE and the wired (CONFIG_ZMK_SPLIT_WIRED) split
+      transports -- the relay-event layer it builds on is transport agnostic.
       Increase CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN to allow larger split
       performance request and response payloads.
 
