@@ -1,0 +1,51 @@
+# Renode DUT firmware for the perf module's `west zmk-renode-test` suite
+# (tests/renode/perf_test.py). Kept separate from build.yaml (the unit-test /
+# build-drift matrix) because these target ZMK's HWv2 `xiao_ble//zmk` board and
+# boot under the Renode emulator, not the CI build check.
+#
+# Build a mode's artifact(s) with e.g.
+#   west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af perf-usb -d build
+#   west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af perf-wired -d build
+# then run
+#   west zmk-renode-test tests/renode --mode usb         --elf build/perf-usb/zephyr/zmk.elf
+#   west zmk-renode-test tests/renode --mode wired-split --elf build/perf-wired-central/zephyr/zmk.elf \
+#       --peripheral-elf build/perf-wired-peripheral/zephyr/zmk.elf
+#
+# The renode_* shields are vendored from zmk-west-commands (that repo does not
+# export them to dependents); each carries its own Renode-boot config (QSPI/USB
+# stubs, wired-split UART transport). This file adds only the perf feature on
+# top via cmake-args.
+include:
+  # usb mode: a non-split Studio-over-USB DUT. perf answers locally (split=false).
+  - artifact: perf-usb
+    board: xiao_ble//zmk
+    shield: renode_tester
+    cmake-args: >-
+      -DCONFIG_ZMK_STUDIO=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+    snippets:
+      - studio-rpc-usb-uart
+
+  # wired-split mode: the CENTRAL half answers Studio over USB and RELAYS perf
+  # requests (split=true) to the peripheral over the wired split link (uart1).
+  - artifact: perf-wired-central
+    board: xiao_ble//zmk
+    shield: renode_usb_wired_split
+    cmake-args: >-
+      -DCONFIG_ZMK_STUDIO=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
+    snippets:
+      - studio-rpc-usb-uart
+
+  # wired-split mode: the PERIPHERAL half receives relayed perf requests and
+  # sends the perf response back. No Studio / handler here -- it only services
+  # the relay (perf_split_handle_request_event).
+  - artifact: perf-wired-peripheral
+    board: xiao_ble//zmk
+    shield: renode_wired_split
+    cmake-args: >-
+      -DCONFIG_ZMK_STUDIO_RPC_PERF=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y

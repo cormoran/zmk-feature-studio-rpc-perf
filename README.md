@@ -211,6 +211,49 @@ west zmk-build tests/zmk-config/config -m tests/zmk-config .
 west zmk-test tests -m .
 ```
 
+**Renode emulator test (perf RPC round trip, no hardware)**
+
+`tests/renode/perf_test.py` boots the perf firmware in the [Renode](https://renode.io/)
+emulator via [`zmk-west-commands`](https://github.com/cormoran/zmk-west-commands)'
+`west zmk-renode-test` and drives the custom `zmk__perf` Studio RPC over the
+emulated transport, asserting a **stable stream** of correct responses (every
+request's sequence number is echoed, the response carries exactly `response_size`
+bytes, and split responses come back through the relay). It runs in CI
+(`.github/workflows/renode.yml`) using the `zmk-renode-test` GitHub Action.
+
+Mode support — the perf RPC round trip is exercised where the test harness can
+drive a *custom* subsystem RPC over the emulated transport:
+
+| Mode | Transport under test | perf RPC round trip | Relay to split peripheral | Status |
+|---|---|---|---|---|
+| `usb` | Studio over the emulated USB CDC | ✅ non-split (local echo) | — | **Supported** |
+| `wired-split` | central answers Studio over USB CDC; perf relayed over the wired split link (uart1) | ✅ | ✅ `split=true`, peripheral `source` | **Supported** |
+| `ble` | Studio over emulated BLE | ⚠️ not yet | — | boot + core-Studio smoke only |
+| `ble-split` | wireless split, Studio over BLE via the central | ⚠️ not yet | ⚠️ not yet | not yet |
+
+`ble` / `ble-split` are **not yet** covered for the perf RPC because the
+emulated BLE host (`renode-ble-host`) only performs LE pairing and a core
+`GetDeviceInfo` / encrypted GATT read — it cannot drive an arbitrary custom
+subsystem call (the perf request) from the Python test. The perf firmware itself
+already speaks Studio over BLE (the `ble` smoke proves it boots and answers core
+Studio). Once `zmk-west-commands` gains a way to drive custom RPCs over the
+emulated BLE transport, the `ble` and `ble-split` perf tests can be added; that
+work is tracked upstream in `zmk-west-commands`.
+
+Run it locally (Renode auto-installs on first use):
+
+```bash
+# usb mode
+west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af perf-usb -d build
+west zmk-renode-test tests/renode --mode usb --elf build/perf-usb/zephyr/zmk.elf
+
+# wired-split mode (central relays perf requests to the peripheral)
+west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af perf-wired -d build
+west zmk-renode-test tests/renode --mode wired-split \
+    --elf build/perf-wired-central/zephyr/zmk.elf \
+    --peripheral-elf build/perf-wired-peripheral/zephyr/zmk.elf
+```
+
 **Web UI test**
 
 The `./web` directory includes Jest tests. See [./web/README.md](./web/README.md#testing) for more details.
