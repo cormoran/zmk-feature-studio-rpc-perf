@@ -3,13 +3,20 @@
 # build-drift matrix) because these target ZMK's HWv2 `xiao_ble//zmk` board and
 # boot under the Renode emulator, not the CI build check.
 #
-# Build a mode's artifact(s) with e.g.
-#   west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af perf-usb -d build
-#   west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af perf-wired -d build
+# Build a mode's artifact(s) with e.g. (-af is a regex, so anchor it -- a bare
+# `perf-ble` also matches perf-ble-split-central)
+#   west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af '^perf-usb$' -d build
+#   west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af '^perf-wired-' -d build
 # then run
 #   west zmk-renode-test tests/renode --mode usb         --elf build/perf-usb/zephyr/zmk.elf
 #   west zmk-renode-test tests/renode --mode wired-split --elf build/perf-wired-central/zephyr/zmk.elf \
 #       --peripheral-elf build/perf-wired-peripheral/zephyr/zmk.elf
+#
+# The BLE modes additionally need the renode-ble-host app (the simulated
+# computer), built once from zmk-west-commands and passed as --host-elf:
+#   west build -b nrf52840dk/nrf52840 -d build/ble-host \
+#       -s dependencies/zmk-west-commands/renode-ble-host \
+#       -- -DCONFIG_RENODE_BLE_HOST_TARGET_NAME='"Renode"'
 #
 # The renode_* shields are vendored from zmk-west-commands (that repo does not
 # export them to dependents); each carries its own Renode-boot config (QSPI/USB
@@ -49,3 +56,41 @@ include:
     cmake-args: >-
       -DCONFIG_ZMK_STUDIO_RPC_PERF=y
       -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
+
+  # ble mode: the same non-split DUT as perf-usb, but the test drives perf over
+  # the emulated BLE Studio GATT transport instead of the USB CDC (the image is
+  # identical to what you would flash -- both transports are compiled in; which
+  # one answers is chosen at runtime by whichever host talks first).
+  - artifact: perf-ble
+    board: xiao_ble//zmk
+    shield: renode_tester
+    cmake-args: >-
+      -DCONFIG_ZMK_STUDIO=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+    snippets:
+      - studio-rpc-usb-uart
+
+  # ble-split mode: a WIRELESS split. The CENTRAL half answers Studio over BLE
+  # (to the renode-ble-host) and relays perf requests to the peripheral over the
+  # BLE split link -- the same relay code path as wired-split, different split
+  # transport. renode_split_{left,right} are the ble-split shields.
+  - artifact: perf-ble-split-central
+    board: xiao_ble//zmk
+    shield: renode_split_left
+    cmake-args: >-
+      -DCONFIG_ZMK_STUDIO=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF_HANDLER=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
+    snippets:
+      - studio-rpc-usb-uart
+
+  - artifact: perf-ble-split-peripheral
+    board: xiao_ble//zmk
+    shield: renode_split_right
+    cmake-args: >-
+      -DCONFIG_ZMK_STUDIO_RPC_PERF=y
+      -DCONFIG_ZMK_STUDIO_RPC_PERF_SPLIT_RPC_RELAY=y
+    snippets:
+      - studio-rpc-usb-uart

@@ -5,12 +5,16 @@ name: Renode Test
 # asserting a stable stream of correct perf responses. See tests/renode/perf_test.py
 # and the "Renode testing" section of the README (incl. the mode support table).
 #
-# Only the modes the perf RPC round trip works in today run here:
+# All four transports drive the real custom RPC:
 #   * usb         -- non-split perf over the DUT's USB CDC.
 #   * wired-split -- perf relayed to the split peripheral over the wired link.
-# ble / ble-split are not yet drivable for a custom RPC from the test harness
-# (renode-ble-host only does GetDeviceInfo / an encrypted GATT read) -- tracked
-# upstream in zmk-west-commands. See the README support table.
+#   * ble         -- non-split perf over the emulated BLE Studio transport,
+#                    driven through the renode-ble-host app's RPC bridge.
+#   * ble-split   -- perf relayed to the peripheral over the BLE split link.
+# The BLE modes build that host app first and pass it as host-elf. ble-split
+# races two LE-SC pairings on one emulated radio and is inherently flaky, so its
+# test step is informational (continue-on-error) -- the same call zmk-west-commands
+# makes for its own ble-split job. See the README support table.
 
 on:
   push:
@@ -38,13 +42,31 @@ jobs:
       matrix:
         include:
           - mode: usb
-            build-filter: perf-usb
+            build-filter: "^perf-usb$"
             elf-path: build/perf-usb/zephyr/zmk.elf
             peripheral-elf: ""
+            needs-host: false
+            informational: false
           - mode: wired-split
-            build-filter: perf-wired
+            build-filter: "^perf-wired-"
             elf-path: build/perf-wired-central/zephyr/zmk.elf
             peripheral-elf: build/perf-wired-peripheral/zephyr/zmk.elf
+            needs-host: false
+            informational: false
+          - mode: ble
+            build-filter: "^perf-ble$"
+            elf-path: build/perf-ble/zephyr/zmk.elf
+            peripheral-elf: ""
+            needs-host: true
+            informational: false
+          - mode: ble-split
+            build-filter: "^perf-ble-split-"
+            elf-path: build/perf-ble-split-central/zephyr/zmk.elf
+            peripheral-elf: build/perf-ble-split-peripheral/zephyr/zmk.elf
+            needs-host: true
+            # Informational: three machines and two LE-SC pairings on one
+            # emulated radio is a roll of the dice, not a firmware signal.
+            informational: true
     name: "Renode (${{ matrix.mode }})"
     steps:
       - name: Checkout
@@ -52,16 +74,29 @@ jobs:
       - uses: ./.github/actions/west-init
       - name: Build firmware (${{ matrix.mode }})
         # -d build keeps the ELF(s) under $GITHUB_WORKSPACE (the west topdir), where
-        # the renode-test action resolves elf-path/peripheral-elf. -af <filter>
-        # selects this mode's artifact(s) from build-renode.yaml.
+        # the renode-test action resolves elf-path/peripheral-elf. -af <regex>
+        # selects exactly this mode's artifact(s) from build-renode.yaml.
         run: >-
           west zmk-build tests/zmk-config
           --build-yaml tests/zmk-config/build-renode.yaml
-          -af ${{ matrix.build-filter }} -d build
+          -af '${{ matrix.build-filter }}' -d build
+      - name: Build renode-ble-host app
+        # The simulated computer that pairs with the DUT and bridges the test's
+        # Studio RPCs onto the BLE link. Owned by zmk-west-commands; built from
+        # the west-managed checkout so it always matches the harness in use.
+        if: matrix.needs-host
+        run: >-
+          west build -b nrf52840dk/nrf52840 -d build/ble-host
+          -s dependencies/zmk-west-commands/renode-ble-host
+          -- -DCONFIG_RENODE_BLE_HOST_TARGET_NAME='"Renode"'
       - name: Renode perf test (${{ matrix.mode }})
+        # continue-on-error must sit on the STEP: at job level the job still
+        # publishes a failure and the PR stays red.
+        continue-on-error: ${{ matrix.informational }}
         uses: cormoran/zmk-west-commands/.github/actions/zmk-renode-test@main
         with:
           mode: ${{ matrix.mode }}
           elf-path: ${{ matrix.elf-path }}
           peripheral-elf: ${{ matrix.peripheral-elf }}
+          host-elf: ${{ matrix.needs-host && 'build/ble-host/zephyr/zephyr.elf' || '' }}
           tests: tests/renode
