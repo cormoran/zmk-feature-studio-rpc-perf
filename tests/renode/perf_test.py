@@ -87,14 +87,19 @@ RPC_TIMEOUT = 15.0
 # wall time, not milliseconds.
 BLE_RPC_TIMEOUT = 240.0
 # Wall budget for the BLE pairing phase (scan -> connect -> LE SC -> MTU ->
-# subscribe). ble-split pairs twice (split link + host link) on one radio.
-BLE_READY_TIMEOUT = 900.0
-BLE_SPLIT_READY_TIMEOUT = 1500.0
+# subscribe). Deliberately not generous: pairing either completes in a couple of
+# hundred seconds or the roll was bad and the host never even sees the DUT's
+# advertisement (measured -- 18-33s for the two-machine case, 177s for a winning
+# three-machine one, versus attempts that scan fruitlessly forever). Waiting
+# longer buys nothing; a fresh emulation re-rolls the dice, which is what
+# BLE_SPLIT_MAX_ATTEMPTS is for.
+BLE_READY_TIMEOUT = 300.0
+BLE_SPLIT_READY_TIMEOUT = 480.0
 # The peripheral half logs this over RTT once the encrypted split link is up
 # (renode_split_right.conf routes ZMK's logs there). Same markers the upstream
 # ble-split smoke asserts on.
 SPLIT_L2_NEEDLES = ["Security changed", "level 2"]
-SPLIT_LINK_TIMEOUT = 600.0
+SPLIT_LINK_TIMEOUT = 300.0
 
 # NOTE: do NOT call renode_harness.raise_global_quantum() here. Coarsening the
 # quantum after pairing is documented as safe, but that was measured against an
@@ -115,7 +120,9 @@ MAX_ATTEMPTS = 2
 # central's advertisement, or a chunked response indication is lost). Upstream's
 # own ble-split job concluded the same -- retry the WHOLE emulation rather than
 # hammering inside an attempt, which destabilises the soft link layer further.
-BLE_SPLIT_MAX_ATTEMPTS = 4
+# Three rolls at the (tight) budgets above keeps the job inside its 45min cap
+# with room for the three firmware builds.
+BLE_SPLIT_MAX_ATTEMPTS = 3
 
 
 def _storage_kwargs() -> dict:
@@ -125,6 +132,14 @@ def _storage_kwargs() -> dict:
     if STORAGE_SIZE is not None:
         kw["storage_size"] = STORAGE_SIZE
     return kw
+
+
+def _console_tail(text: str, lines: int = 25) -> str:
+    """Last `lines` of a captured console, with the log backend's colour codes
+    stripped. The raw buffer is mostly ANSI escapes and \\r, which makes a
+    failure message unreadable in CI output."""
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", text).replace("\r", "")
+    return "\n".join(clean.splitlines()[-lines:])
 
 
 def _mon_flag(mon, command: str) -> bool | None:
@@ -563,7 +578,7 @@ class PerfRenodeTest(unittest.TestCase):
                 raise AssertionError(
                     f"the BLE split link never reached L2 within {SPLIT_LINK_TIMEOUT:.0f}s "
                     "(emulated-radio pairing flake). Peripheral RTT tail:\n"
-                    f"{bridge.drained.get('peripheral_rtt', '')[-2000:]}"
+                    f"{_console_tail(bridge.drained.get('peripheral_rtt', ''))}"
                 )
             print("[perf] ble-split: encrypted split link up", file=sys.stderr)
 
@@ -639,8 +654,8 @@ class PerfRenodeTest(unittest.TestCase):
             raise AssertionError(
                 "the renode-ble-host never reached BRIDGE:READY within "
                 f"{ready_timeout:.0f}s (emulated-radio pairing flake or a real "
-                f"regression). Host console tail:\n"
-                f"{bridge.drained.get('host_console', '')[-2000:]}"
+                "regression). Host console tail:\n"
+                f"{_console_tail(bridge.drained.get('host_console', ''))}"
             )
         print(
             f"[perf] BLE RPC bridge ready after {time.monotonic() - t0:.0f}s wall",

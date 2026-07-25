@@ -224,12 +224,12 @@ bytes, and split responses come back through the relay). It runs in CI
 Mode support — every mode drives the real `zmk__perf` custom subsystem call over
 its own transport:
 
-| Mode | Transport under test | perf RPC round trip | Relay to split peripheral | Round trips |
-|---|---|---|---|---|
-| `usb` | Studio over the emulated USB CDC | ✅ non-split (local echo) | — | 50 |
-| `wired-split` | central answers Studio over USB CDC; perf relayed over the wired split link (uart1) | ✅ | ✅ `split=true`, peripheral `source` | 30 |
-| `ble` | Studio over emulated BLE (GATT RPC characteristic) | ✅ non-split | — | 4 |
-| `ble-split` | wireless split; Studio over BLE via the central, perf relayed over the BLE split link | ✅ | ✅ `split=true`, peripheral `source` | 3 |
+| Mode | Transport under test | perf RPC round trip | Relay to split peripheral | Round trips | Status |
+|---|---|---|---|---|---|
+| `usb` | Studio over the emulated USB CDC | ✅ non-split (local echo) | — | 50 | **green** |
+| `wired-split` | central answers Studio over USB CDC; perf relayed over the wired split link (uart1) | ✅ | ✅ `split=true`, peripheral `source` | 30 | **green** |
+| `ble` | Studio over emulated BLE (GATT RPC characteristic) | ✅ non-split | — | 12 | **green** |
+| `ble-split` | wireless split; Studio over BLE via the central, perf relayed over the BLE split link | ✅ | ✅ `split=true`, peripheral `source` | 6 | ⚠️ blocked on the emulator |
 
 The BLE modes reach the DUT through the `renode-ble-host` app's **RPC bridge**:
 the host app relays framed Studio request bytes from the Python test to the
@@ -237,9 +237,24 @@ DUT's RPC characteristic and streams the response indications back, so the same
 `PerfRpcDriver` drives every transport. They are far slower than `usb` /
 `wired-split` — the emulated radio needs a 10 µs global time quantum for the
 whole exchange, and coarsening it after pairing breaks the RPC path — so they
-assert a handful of correct round trips rather than a sustained stream. The
-three-machine `ble-split` case additionally races two LE-SC pairings on one
-emulated radio, which is inherently flaky; its CI job is informational.
+assert a shorter stream rather than a sustained one.
+
+**`ble-split` is written and wired up but has not yet completed a green run.**
+Everything up to the relayed stream works — both encrypted links come up, the
+bridge drives RPCs into the central, and the non-split sanity pass over BLE
+passes — but a three-machine emulation with two LE-SC pairings on one soft radio
+usually dies first, most often taking ZMK's link layer down with it:
+
+```
+ASSERTION FAIL [next] @ zephyr/subsys/bluetooth/controller/ll_sw/nordic/lll/lll.c:891
+>>> ZEPHYR FATAL ERROR 3: Kernel oops on CPU 0 ... Halting system
+```
+
+That is the emulated radio, not this module — `zmk-west-commands` reached the
+same conclusion for its own `ble-split` smoke and marks that job informational.
+This repo does the same: the `ble-split` CI step is `continue-on-error`, and the
+test fails fast on a crashed machine so its retries re-roll the emulation quickly
+instead of waiting out a halted CPU.
 
 Run it locally (Renode auto-installs on first use):
 
