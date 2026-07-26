@@ -5,16 +5,21 @@ name: Renode Test
 # asserting a stable stream of correct perf responses. See tests/renode/perf_test.py
 # and the "Renode testing" section of the README (incl. the mode support table).
 #
-# All four transports drive the real custom RPC:
-#   * usb         -- non-split perf over the DUT's USB CDC.
-#   * wired-split -- perf relayed to the split peripheral over the wired link.
-#   * ble         -- non-split perf over the emulated BLE Studio transport,
-#                    driven through the renode-ble-host app's RPC bridge.
-#   * ble-split   -- perf relayed to the peripheral over the BLE split link.
-# The BLE modes build that host app first and pass it as host-elf. ble-split
-# races two LE-SC pairings on one emulated radio and is inherently flaky, so its
-# test step is informational (continue-on-error) -- the same call zmk-west-commands
-# makes for its own ble-split job. See the README support table.
+# All four jobs drive the real custom RPC, one per transport:
+#   * usb           -- non-split perf over the DUT's USB CDC.
+#   * wired-split   -- perf relayed to the peripheral over the wired split link.
+#   * ble           -- non-split perf over the emulated BLE Studio transport,
+#                      driven through the renode-ble-host app's RPC bridge (so
+#                      this job builds that app and passes it as host-elf).
+#   * usb+ble-split -- perf relayed to the peripheral over the BLE split link,
+#                      driven over the central's USB CDC.
+# The last one is the orthogonal usb host-link x ble split-link cell, NOT the
+# `ble-split` preset: it covers the same relay code path while keeping only the
+# split link on the emulated radio. ble-split itself (Studio *and* split both on
+# the radio, plus the host app) is implemented and runnable via
+# `--mode ble-split`, but its three machines and two racing LE-SC pairings take
+# the soft link layer down often enough that it is not worth a CI job. See the
+# README support table.
 
 on:
   push:
@@ -41,38 +46,50 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - mode: usb
+          - name: usb
+            mode: usb
+            host-link: ""
+            split-link: ""
             build-filter: "^perf-usb$"
             elf-path: build/perf-usb/zephyr/zmk.elf
             peripheral-elf: ""
             needs-host: false
-            informational: false
-          - mode: wired-split
+          - name: wired-split
+            mode: wired-split
+            host-link: ""
+            split-link: ""
             build-filter: "^perf-wired-"
             elf-path: build/perf-wired-central/zephyr/zmk.elf
             peripheral-elf: build/perf-wired-peripheral/zephyr/zmk.elf
             needs-host: false
-            informational: false
-          - mode: ble
+          - name: ble
+            mode: ble
+            host-link: ""
+            split-link: ""
             build-filter: "^perf-ble$"
             elf-path: build/perf-ble/zephyr/zmk.elf
             peripheral-elf: ""
             needs-host: true
-            informational: false
-          - mode: ble-split
+          # The BLE split relay, driven over the central's USB CDC. This is the
+          # orthogonal usb host-link x ble split-link cell rather than the
+          # `ble-split` preset: it exercises the same relay code path, but only
+          # the split link is on the emulated radio (two machines, one pairing)
+          # instead of ble-split's three machines and two racing pairings, whose
+          # soft link layer regularly asserts and halts a machine. See the README.
+          - name: usb+ble-split
+            mode: ""
+            host-link: usb
+            split-link: ble
             build-filter: "^perf-ble-split-"
             elf-path: build/perf-ble-split-central/zephyr/zmk.elf
             peripheral-elf: build/perf-ble-split-peripheral/zephyr/zmk.elf
-            needs-host: true
-            # Informational: three machines and two LE-SC pairings on one
-            # emulated radio is a roll of the dice, not a firmware signal.
-            informational: true
-    name: "Renode (${{ matrix.mode }})"
+            needs-host: false
+    name: "Renode (${{ matrix.name }})"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - uses: ./.github/actions/west-init
-      - name: Build firmware (${{ matrix.mode }})
+      - name: Build firmware (${{ matrix.name }})
         # -d build keeps the ELF(s) under $GITHUB_WORKSPACE (the west topdir), where
         # the renode-test action resolves elf-path/peripheral-elf. -af <regex>
         # selects exactly this mode's artifact(s) from build-renode.yaml.
@@ -89,13 +106,14 @@ jobs:
           west build -b nrf52840dk/nrf52840 -d build/ble-host
           -s dependencies/zmk-west-commands/renode-ble-host
           -- -DCONFIG_RENODE_BLE_HOST_TARGET_NAME='"Renode"'
-      - name: Renode perf test (${{ matrix.mode }})
-        # continue-on-error must sit on the STEP: at job level the job still
-        # publishes a failure and the PR stays red.
-        continue-on-error: ${{ matrix.informational }}
+      - name: Renode perf test (${{ matrix.name }})
         uses: cormoran/zmk-west-commands/.github/actions/zmk-renode-test@main
         with:
+          # mode and host-link/split-link are mutually exclusive; the action
+          # prefers the axes whenever either is set.
           mode: ${{ matrix.mode }}
+          host-link: ${{ matrix.host-link }}
+          split-link: ${{ matrix.split-link }}
           elf-path: ${{ matrix.elf-path }}
           peripheral-elf: ${{ matrix.peripheral-elf }}
           host-elf: ${{ matrix.needs-host && 'build/ble-host/zephyr/zephyr.elf' || '' }}
