@@ -14,15 +14,30 @@ Mode support (see the README "Renode testing" section for the full table):
   * usb         -- non-split perf over the DUT's USB CDC (split=false).
   * wired-split -- perf RELAYED to the split peripheral over the wired link
                    (split=true), plus a non-split sanity pass on the central.
-  * ble / ble-split -- SKIPPED. The renode-ble-host app only pairs and does a
-                   GetDeviceInfo / encrypted GATT read; a *custom* subsystem RPC
-                   is not drivable from the Python test harness over BLE yet
-                   (a zmk-west-commands limitation, tracked upstream). ble mode
-                   still proves the perf-enabled image boots and answers core
-                   Studio over BLE via the generic smoke.
+  * ble         -- non-split perf over the emulated BLE Studio GATT transport,
+                   driven through the renode-ble-host RPC bridge. Needs
+                   --host-elf (the host app).
+  * usb x ble   -- perf RELAYED to the split peripheral over the BLE split link,
+                   driven over the central's USB CDC (--host-link usb
+                   --split-link ble). No preset name, no host app.
+  * ble-split   -- the same relay, but the request also arrives over BLE
+                   (peripheral <-BLE-> central <-BLE-> host). Needs --host-elf.
 
-The env contract (ZMK_RENODE_MODE / _ELF / _PERIPHERAL_ELF / _STORAGE_*) is set
-by `west zmk-renode-test`; see docs/renode-testing.md in zmk-west-commands.
+Both BLE split modes assert the same thing about the relay; they differ only in
+how the request reaches the central. Prefer `usb x ble` -- it puts ONLY the split
+link on the emulated radio (two machines, one pairing), where ble-split adds a
+second encrypted link and a third machine and usually dies of an emulated
+soft-link-layer assert before finishing. See the README's mode table.
+
+Anything Studio-over-BLE goes through `renode_harness.BleRpcBridge` (the host
+app's uart1), so one PerfRpcDriver drives every transport. Those modes are FAR
+slower than usb/wired -- the emulated radio needs a 10us global quantum for the
+whole exchange, not just for pairing (see the note by BLE_READY_TIMEOUT) -- so
+they run a short stream rather than a long one.
+
+The env contract (ZMK_RENODE_MODE / _HOST_LINK / _SPLIT_LINK / _ELF /
+_PERIPHERAL_ELF / _HOST_ELF / _STORAGE_*) is set by `west zmk-renode-test`; see
+docs/renode-testing.md in zmk-west-commands.
 """
 
 from __future__ import annotations
@@ -39,8 +54,18 @@ from pathlib import Path
 import renode_harness  # noqa: E402
 
 MODE = os.environ.get("ZMK_RENODE_MODE", "")
+# The orthogonal axes behind MODE. usb+ble-split has no preset name, so it is
+# selected by these rather than by MODE.
+HOST_LINK = os.environ.get("ZMK_RENODE_HOST_LINK", "")
+SPLIT_LINK = os.environ.get("ZMK_RENODE_SPLIT_LINK", "")
 ELF = os.environ.get("ZMK_RENODE_ELF", "")
 PERIPHERAL_ELF = os.environ.get("ZMK_RENODE_PERIPHERAL_ELF", "")
+HOST_ELF = os.environ.get("ZMK_RENODE_HOST_ELF", "")
+
+# Raised by the BLE RPC bridge; only present on a zmk-west-commands new enough to
+# have it. Fall back so the usb / wired-split tests still run against an older
+# pinned harness (the BLE tests skip themselves there -- see _ble_driver).
+BridgeError = getattr(renode_harness, "BridgeError", RuntimeError)
 STORAGE_ADDR = int(os.environ.get("ZMK_RENODE_STORAGE_ADDR", "0"), 0) or None
 STORAGE_SIZE = int(os.environ.get("ZMK_RENODE_STORAGE_SIZE", "0"), 0) or None
 
@@ -61,7 +86,49 @@ WIRED_ITERATIONS = 30
 # (CONFIG_ZMK_SPLIT_RELAY_EVENT_DATA_LEN default 128 -> ~124 usable bytes).
 RESPONSE_SIZES = [0, 1, 8, 32, 64, 100]
 
+# The BLE modes are much slower than usb (the emulated radio needs a 10us global
+# quantum for the whole exchange, and every response is chunked into 27-byte
+# indications), so they assert a shorter stream over smaller payloads -- ~2s per
+# round trip measured. ble-split pays for a second encrypted link plus the relay
+# hop, so it does fewer still.
+BLE_ITERATIONS = 12
+BLE_SPLIT_ITERATIONS = 6
+BLE_RESPONSE_SIZES = [0, 1, 8, 32]
+
 RPC_TIMEOUT = 15.0
+# Per-request budget over the emulated radio -- a BLE round trip is seconds of
+# wall time, not milliseconds.
+BLE_RPC_TIMEOUT = 240.0
+# Wall budget for the BLE pairing phase (scan -> connect -> LE SC -> MTU ->
+# subscribe). Deliberately not generous: pairing either completes in a couple of
+# hundred seconds or the roll was bad and the host never even sees the DUT's
+# advertisement (measured -- 18-33s for the two-machine case, 177s for a winning
+# three-machine one, versus attempts that scan fruitlessly forever). Waiting
+# longer buys nothing; a fresh emulation re-rolls the dice, which is what
+# BLE_SPLIT_MAX_ATTEMPTS is for.
+BLE_READY_TIMEOUT = 300.0
+BLE_SPLIT_READY_TIMEOUT = 480.0
+# The peripheral half logs this over RTT once the encrypted split link is up
+# (renode_split_right.conf routes ZMK's logs there). Same markers the upstream
+# ble-split smoke asserts on.
+SPLIT_L2_NEEDLES = ["Security changed", "level 2"]
+SPLIT_LINK_TIMEOUT = 300.0
+# Zephyr's last words. The emulated soft link layer takes machines down with an
+# LL assert; spotting it turns a full-budget wait into an immediate re-roll.
+CRASH_MARKERS = (
+    "ZEPHYR FATAL ERROR",
+    "Kernel oops",
+    "ASSERTION FAIL",
+    "Halting system",
+)
+
+# NOTE: do NOT call renode_harness.raise_global_quantum() here. Coarsening the
+# quantum after pairing is documented as safe, but that was measured against an
+# encrypted GATT *read*; the RPC path (ATT write + response indications) breaks
+# on the very next request -- measured on this DUT, at 0.001 the response never
+# arrives and at 0.0001 the DUT rejects the write outright ("BRIDGE:WRITE-ERR
+# att"). The 10us boot quantum is load-bearing for the whole BLE RPC exchange,
+# which is why these tests do a handful of round trips rather than a stream.
 BOOT_SETTLE = 8.0
 WIRING_TIMEOUT = 30.0
 BOOT_TIMEOUT = 20.0
@@ -69,6 +136,14 @@ BOOT_TIMEOUT = 20.0
 # the wall-clock-paced USB attach, which can lose a race under heavy CI host
 # contention. A genuine break fails BOTH attempts.
 MAX_ATTEMPTS = 2
+# ble-split gets more rolls: three machines and two LE-SC pairings share one
+# emulated radio, and a bad roll costs the whole attempt (the host never sees the
+# central's advertisement, or a chunked response indication is lost). Upstream's
+# own ble-split job concluded the same -- retry the WHOLE emulation rather than
+# hammering inside an attempt, which destabilises the soft link layer further.
+# Three rolls at the (tight) budgets above keeps the job inside its 45min cap
+# with room for the three firmware builds.
+BLE_SPLIT_MAX_ATTEMPTS = 3
 
 
 def _storage_kwargs() -> dict:
@@ -78,6 +153,14 @@ def _storage_kwargs() -> dict:
     if STORAGE_SIZE is not None:
         kw["storage_size"] = STORAGE_SIZE
     return kw
+
+
+def _console_tail(text: str, lines: int = 25) -> str:
+    """Last `lines` of a captured console, with the log backend's colour codes
+    stripped. The raw buffer is mostly ANSI escapes and \\r, which makes a
+    failure message unreadable in CI output."""
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", text).replace("\r", "")
+    return "\n".join(clean.splitlines()[-lines:])
 
 
 def _mon_flag(mon, command: str) -> bool | None:
@@ -230,15 +313,22 @@ class PerfRpcDriver:
         return perf_resp.perf
 
 
-def _assert_stream(driver: PerfRpcDriver, iterations: int, split: bool):
+def _assert_stream(
+    driver: PerfRpcDriver,
+    iterations: int,
+    split: bool,
+    sizes: list[int] | None = None,
+    timeout: float = RPC_TIMEOUT,
+):
     """Drive `iterations` perf round trips (rotating response sizes) and assert
     every one echoes its sequence number, returns exactly response_size bytes,
     and matches the expected split flag. Returns the list of PerfResponses."""
+    sizes = sizes if sizes is not None else RESPONSE_SIZES
     responses = []
     for i in range(iterations):
         seq = 0x1000 + i
-        response_size = RESPONSE_SIZES[i % len(RESPONSE_SIZES)]
-        perf = driver.perf_roundtrip(seq, response_size, split)
+        response_size = sizes[i % len(sizes)]
+        perf = driver.perf_roundtrip(seq, response_size, split, timeout=timeout)
 
         if perf.sequence_number != seq:
             raise AssertionError(
@@ -280,24 +370,24 @@ class PerfRenodeTest(unittest.TestCase):
         cls.studio_pb2 = _load_studio_pb2()
         cls.perf_pb2 = _compile_perf_pb2()
 
-    def _run_with_retry(self, attempt):
-        """Run `attempt` (a fresh-boot callable) with one whole-emulation retry
-        on a transport/boot flake; re-raise the last error if both fail."""
+    def _run_with_retry(self, attempt, max_attempts: int = MAX_ATTEMPTS):
+        """Run `attempt` (a fresh-boot callable) with whole-emulation retries on
+        a transport/boot flake; re-raise the last error if all of them fail."""
         last_err: Exception | None = None
-        for n in range(1, MAX_ATTEMPTS + 1):
+        for n in range(1, max_attempts + 1):
             if n > 1:
                 print(
-                    f"[perf] --- retry {n}/{MAX_ATTEMPTS} (fresh emulation; "
+                    f"[perf] --- retry {n}/{max_attempts} (fresh emulation; "
                     "previous attempt flaked) ---",
                     file=sys.stderr,
                 )
             try:
                 attempt()
                 return
-            except (AssertionError, TimeoutError, OSError) as err:
+            except (AssertionError, TimeoutError, OSError, BridgeError) as err:
                 last_err = err
                 print(
-                    f"[perf] attempt {n}/{MAX_ATTEMPTS} FAILED: {err!r}",
+                    f"[perf] attempt {n}/{max_attempts} FAILED: {err!r}",
                     file=sys.stderr,
                 )
         assert last_err is not None
@@ -404,19 +494,339 @@ class PerfRenodeTest(unittest.TestCase):
             central_console.close()
             session.stop()
 
+    # -- ble mode -----------------------------------------------------------
+
+    @unittest.skipUnless(MODE == "ble", "ble-mode test")
+    def test_ble_perf_stream(self):
+        """Non-split perf over the emulated BLE Studio transport: the request is
+        written to the DUT's Studio RPC GATT characteristic by the renode-ble-host
+        app on the harness's behalf, and the chunked response indications are
+        reassembled back into a PerfResponse."""
+        if not HOST_ELF:
+            raise unittest.SkipTest(
+                "ZMK_RENODE_HOST_ELF not set -- ble mode needs --host-elf "
+                "(the renode-ble-host app; see build-renode.yaml's header)"
+            )
+        self._run_with_retry(self._ble_attempt)
+
+    def _ble_attempt(self):
+        import random
+
+        port_base = random.randint(26000, 40000)
+        session, dut_console, dut_rpc, host_console = renode_harness.boot_ble_pair(
+            self.renode_path,
+            dut_elf=Path(ELF),
+            host_elf=Path(HOST_ELF),
+            port_base=port_base,
+            **_storage_kwargs(),
+        )
+        try:
+            drains = [("host_console", host_console._sock)]
+            if session.dut_rtt is not None:
+                drains.append(("dut_rtt", session.dut_rtt._sock))
+            driver = self._ble_driver(session, drains, BLE_READY_TIMEOUT)
+            print(
+                f"[perf] ble: streaming {BLE_ITERATIONS} non-split perf requests "
+                "over the encrypted BLE link...",
+                file=sys.stderr,
+            )
+            _assert_stream(
+                driver,
+                BLE_ITERATIONS,
+                split=False,
+                sizes=BLE_RESPONSE_SIZES,
+                timeout=BLE_RPC_TIMEOUT,
+            )
+            print(
+                f"[perf] ble OK: {BLE_ITERATIONS}/{BLE_ITERATIONS} perf round trips over BLE",
+                file=sys.stderr,
+            )
+        finally:
+            self._close_bridge(session)
+            for s in (dut_console, dut_rpc, host_console, session.dut_rtt):
+                if s is not None:
+                    s.close()
+            session.stop()
+
+    # -- usb x ble-split (usb host-link, ble split-link) ---------------------
+
+    @unittest.skipUnless(
+        (HOST_LINK, SPLIT_LINK) == ("usb", "ble"), "usb+ble-split-mode test"
+    )
+    def test_usb_ble_split_perf_relay_stream(self):
+        """Perf relayed to the split PERIPHERAL over the BLE split link, driven
+        over the central's USB CDC:
+
+            peripheral <--BLE(split)--> central <--USB CDC--> test
+
+        Same relay assertions as wired-split (split=true, non-zero peripheral
+        source), so a relay regression shows up on either split transport -- but
+        without ble-split's second radio link. That matters: with only the split
+        link on the air this is two CPUs and one pairing instead of three CPUs and
+        two racing pairings, so it is the configuration that actually completes.
+        """
+        if not PERIPHERAL_ELF:
+            raise unittest.SkipTest(
+                "ZMK_RENODE_PERIPHERAL_ELF not set for usb+ble-split"
+            )
+        self._run_with_retry(self._usb_ble_split_attempt, BLE_SPLIT_MAX_ATTEMPTS)
+
+    def _usb_ble_split_attempt(self):
+        import random
+
+        port_base = random.randint(26000, 40000)
+        session, central_console, peripheral_console = (
+            renode_harness.boot_usb_ble_split(
+                self.renode_path,
+                central_elf=Path(ELF),
+                peripheral_elf=Path(PERIPHERAL_ELF),
+                port_base=port_base,
+                **_storage_kwargs(),
+            )
+        )
+        try:
+            # Attach USB first: a real USB image busy-waits in USB init until the
+            # host enumerates it, so nothing else the central should do -- pairing
+            # included -- happens before this. `machines` covers BOTH halves, or
+            # the machine-scoped pause freezes only the central and the split link
+            # dies of supervision timeout (see attach_dual_cdc_bridge).
+            time.sleep(BOOT_SETTLE)
+            studio = self._attach_usb_studio(
+                session, central_console, port_base, machines=("central", "peripheral")
+            )
+
+            # The encrypted split link is independent of USB; relaying before it
+            # is up returns a perf ErrorResponse (-EAGAIN) that reads like a relay
+            # bug. The peripheral's console is USB-CDC-silent, so watch its RTT.
+            self._wait_for_split_l2(session)
+            print("[perf] usb+ble-split: encrypted split link up", file=sys.stderr)
+
+            driver = PerfRpcDriver(studio, self.studio_pb2, self.perf_pb2)
+            driver.discover_subsystem()
+
+            # Non-split sanity: the central answers locally (split=false).
+            print(
+                "[perf] usb+ble-split: non-split sanity pass on the central...",
+                file=sys.stderr,
+            )
+            _assert_stream(driver, len(RESPONSE_SIZES), split=False)
+
+            print(
+                f"[perf] usb+ble-split: streaming {BLE_SPLIT_ITERATIONS} RELAYED perf "
+                "requests to the peripheral over the BLE split link...",
+                file=sys.stderr,
+            )
+            _assert_stream(
+                driver,
+                BLE_SPLIT_ITERATIONS,
+                split=True,
+                sizes=BLE_RESPONSE_SIZES,
+                timeout=BLE_RPC_TIMEOUT,
+            )
+            print(
+                f"[perf] usb+ble-split OK: {BLE_SPLIT_ITERATIONS}/{BLE_SPLIT_ITERATIONS} "
+                "relayed perf round trips (peripheral, over the BLE split link)",
+                file=sys.stderr,
+            )
+        finally:
+            for s in getattr(self, "_cdc_sockets", []):
+                s.close()
+            for s in (
+                central_console,
+                peripheral_console,
+                session.central_rtt,
+                session.peripheral_rtt,
+            ):
+                if s is not None:
+                    s.close()
+            session.stop()
+
+    def _wait_for_split_l2(self, session):
+        """Block until the peripheral's RTT shows the encrypted split link, giving
+        up early if either half halts (the emulated soft link layer takes machines
+        down with an LL assert, and waiting out the budget on a corpse is waste)."""
+        deadline = time.monotonic() + SPLIT_LINK_TIMEOUT
+        buf = ""
+        while time.monotonic() < deadline:
+            buf += renode_harness.drain_text(session.peripheral_rtt._sock, timeout=0.5)
+            if all(n in buf for n in SPLIT_L2_NEEDLES):
+                return
+            crash = next((m for m in CRASH_MARKERS if m in buf), None)
+            if crash is not None:
+                raise AssertionError(
+                    f"the split peripheral halted ({crash!r}) while the split link was "
+                    f"coming up. RTT tail:\n{_console_tail(buf)}"
+                )
+        raise AssertionError(
+            f"the BLE split link never reached L2 within {SPLIT_LINK_TIMEOUT:.0f}s. "
+            f"Peripheral RTT tail:\n{_console_tail(buf)}"
+        )
+
+    # -- ble-split mode -----------------------------------------------------
+
+    @unittest.skipUnless(MODE == "ble-split", "ble-split-mode test")
+    def test_ble_split_perf_relay_stream(self):
+        """Perf relayed to the split PERIPHERAL over the BLE split link, with the
+        request reaching the central over its own encrypted BLE link to the host:
+        peripheral <--BLE(split)--> central <--BLE(Studio)--> host. Asserts the
+        same split=true / non-zero peripheral source as wired-split, so a relay
+        regression shows up on either split transport."""
+        if not PERIPHERAL_ELF:
+            raise unittest.SkipTest(
+                "ZMK_RENODE_PERIPHERAL_ELF not set for ble-split mode"
+            )
+        if not HOST_ELF:
+            raise unittest.SkipTest("ZMK_RENODE_HOST_ELF not set for ble-split mode")
+        self._run_with_retry(self._ble_split_attempt, BLE_SPLIT_MAX_ATTEMPTS)
+
+    def _ble_split_attempt(self):
+        import random
+
+        port_base = random.randint(26000, 40000)
+        session, central_console, peripheral_rtt, host_console = (
+            renode_harness.boot_ble_split(
+                self.renode_path,
+                central_elf=Path(ELF),
+                peripheral_elf=Path(PERIPHERAL_ELF),
+                host_elf=Path(HOST_ELF),
+                port_base=port_base,
+                **_storage_kwargs(),
+            )
+        )
+        try:
+            drains = [("host_console", host_console._sock)]
+            if peripheral_rtt is not None:
+                drains.append(("peripheral_rtt", peripheral_rtt._sock))
+            if session.central_rtt is not None:
+                drains.append(("central_rtt", session.central_rtt._sock))
+            driver = self._ble_driver(session, drains, BLE_SPLIT_READY_TIMEOUT)
+
+            # The host link coming up says nothing about the SPLIT link, and the
+            # two pair independently on one emulated radio. Relaying before the
+            # peripheral is connected just makes the central answer with a perf
+            # ErrorResponse (-EAGAIN), which reads like a relay bug -- so wait
+            # for the peripheral's own "Security changed ... level 2" first.
+            bridge = session.host_bridge
+            if not bridge.wait_for_drain(
+                "peripheral_rtt", SPLIT_L2_NEEDLES, timeout=SPLIT_LINK_TIMEOUT
+            ):
+                raise AssertionError(
+                    f"the BLE split link never reached L2 within {SPLIT_LINK_TIMEOUT:.0f}s "
+                    "(emulated-radio pairing flake). Peripheral RTT tail:\n"
+                    f"{_console_tail(bridge.drained.get('peripheral_rtt', ''))}"
+                )
+            print("[perf] ble-split: encrypted split link up", file=sys.stderr)
+
+            # Non-split sanity first: the central answers locally, so a failure
+            # here means the Studio path is broken, not the split relay.
+            print(
+                "[perf] ble-split: non-split sanity pass on the central...",
+                file=sys.stderr,
+            )
+            _assert_stream(
+                driver,
+                1,
+                split=False,
+                sizes=BLE_RESPONSE_SIZES,
+                timeout=BLE_RPC_TIMEOUT,
+            )
+
+            print(
+                f"[perf] ble-split: streaming {BLE_SPLIT_ITERATIONS} RELAYED perf "
+                "requests to the peripheral over the BLE split link...",
+                file=sys.stderr,
+            )
+            _assert_stream(
+                driver,
+                BLE_SPLIT_ITERATIONS,
+                split=True,
+                sizes=BLE_RESPONSE_SIZES,
+                timeout=BLE_RPC_TIMEOUT,
+            )
+            print(
+                f"[perf] ble-split OK: {BLE_SPLIT_ITERATIONS}/{BLE_SPLIT_ITERATIONS} relayed "
+                "perf round trips (peripheral, over BLE)",
+                file=sys.stderr,
+            )
+        finally:
+            self._close_bridge(session)
+            for s in (
+                central_console,
+                peripheral_rtt,
+                host_console,
+                session.central_rtt,
+            ):
+                if s is not None:
+                    s.close()
+            session.stop()
+
+    # -- shared BLE plumbing ------------------------------------------------
+
+    def _ble_driver(self, session, drains, ready_timeout: float):
+        """Wait for the host app's RPC bridge, coarsen the quantum now that the
+        encrypted link is up, and return a PerfRpcDriver bound to the bridge.
+
+        `drains` are (name, socket) pairs nobody else reads -- handing them to the
+        bridge is what keeps the emulated consoles from back-pressuring and
+        stalling the BLE stack mid-stream (see BleRpcBridge.attach_drain).
+        """
+        bridge = getattr(session, "host_bridge", None)
+        if bridge is None:
+            raise unittest.SkipTest(
+                "this zmk-west-commands has no renode-ble-host RPC bridge "
+                "(session.host_bridge is None) -- BLE perf needs the S7 bridge"
+            )
+        for name, sock in drains:
+            bridge.attach_drain(sock, name)
+        print(
+            "[perf] waiting for the BLE link + RPC bridge (emulated pairing is slow)...",
+            file=sys.stderr,
+        )
+        t0 = time.monotonic()
+        try:
+            bridge.wait_ready(timeout=ready_timeout)
+        except TimeoutError:
+            raise AssertionError(
+                "the renode-ble-host never reached BRIDGE:READY within "
+                f"{ready_timeout:.0f}s (emulated-radio pairing flake or a real "
+                "regression). Host console tail:\n"
+                f"{_console_tail(bridge.drained.get('host_console', ''))}"
+            )
+        print(
+            f"[perf] BLE RPC bridge ready after {time.monotonic() - t0:.0f}s wall",
+            file=sys.stderr,
+        )
+        driver = PerfRpcDriver(bridge, self.studio_pb2, self.perf_pb2)
+        driver.discover_subsystem(timeout=BLE_RPC_TIMEOUT)
+        return driver
+
+    @staticmethod
+    def _close_bridge(session):
+        bridge = getattr(session, "host_bridge", None)
+        if bridge is not None:
+            bridge.close()
+
     # -- shared USB attach --------------------------------------------------
 
-    def _attach_usb_studio(self, session, console, port_base):
+    def _attach_usb_studio(self, session, console, port_base, machines=None):
         """Settle the guest's USB init, attach the DualCdcAcmBridge, and return
-        the Studio CDC socket (auto-detecting a possible console CDC first)."""
+        the Studio CDC socket (auto-detecting a possible console CDC first).
+
+        `machines` must name every machine (USB one first) on a multi-machine
+        emulation -- the attach's pause is machine-scoped, and leaving a BLE peer
+        running while the central is frozen drops the split link.
+        """
         mon = session.mon
         assert mon is not None
         t0 = time.monotonic()
         while time.monotonic() - t0 < BOOT_SETTLE:
             renode_harness.drain_text(console._sock, timeout=0.5)
 
+        kwargs = {"machines": machines} if machines is not None else {}
         cdc = list(
-            renode_harness.attach_dual_cdc_bridge(session, port_base + 4, port_base + 5)
+            renode_harness.attach_dual_cdc_bridge(
+                session, port_base + 4, port_base + 5, **kwargs
+            )
         )
         self._cdc_sockets = cdc
 

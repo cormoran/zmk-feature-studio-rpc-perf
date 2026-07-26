@@ -221,38 +221,94 @@ request's sequence number is echoed, the response carries exactly `response_size
 bytes, and split responses come back through the relay). It runs in CI
 (`.github/workflows/renode.yml`) using the `zmk-renode-test` GitHub Action.
 
-Mode support — the perf RPC round trip is exercised where the test harness can
-drive a *custom* subsystem RPC over the emulated transport:
+Mode support — every mode drives the real `zmk__perf` custom subsystem call over
+its own transport:
 
-| Mode | Transport under test | perf RPC round trip | Relay to split peripheral | Status |
-|---|---|---|---|---|
-| `usb` | Studio over the emulated USB CDC | ✅ non-split (local echo) | — | **Supported** |
-| `wired-split` | central answers Studio over USB CDC; perf relayed over the wired split link (uart1) | ✅ | ✅ `split=true`, peripheral `source` | **Supported** |
-| `ble` | Studio over emulated BLE | ⚠️ not yet | — | boot + core-Studio smoke only |
-| `ble-split` | wireless split, Studio over BLE via the central | ⚠️ not yet | ⚠️ not yet | not yet |
+| Mode | Transport under test | perf RPC round trip | Relay to split peripheral | Round trips | In CI |
+|---|---|---|---|---|---|
+| `usb` | Studio over the emulated USB CDC | ✅ non-split (local echo) | — | 50 | ✅ |
+| `wired-split` | central answers Studio over USB CDC; perf relayed over the wired split link (uart1) | ✅ | ✅ `split=true`, peripheral `source` | 30 | ✅ |
+| `ble` | Studio over emulated BLE (GATT RPC characteristic) | ✅ non-split | — | 12 | ✅ |
+| **`usb` × `ble` split** | central answers Studio over USB CDC; perf relayed over the **BLE** split link | ✅ | ✅ `split=true`, peripheral `source` | 6 | ✅ |
+| `ble-split` | wireless split; Studio over BLE via the central, perf relayed over the BLE split link | ✅ | ✅ | 6 | ❌ see below |
 
-`ble` / `ble-split` are **not yet** covered for the perf RPC because the
-emulated BLE host (`renode-ble-host`) only performs LE pairing and a core
-`GetDeviceInfo` / encrypted GATT read — it cannot drive an arbitrary custom
-subsystem call (the perf request) from the Python test. The perf firmware itself
-already speaks Studio over BLE (the `ble` smoke proves it boots and answers core
-Studio). Once `zmk-west-commands` gains a way to drive custom RPCs over the
-emulated BLE transport, the `ble` and `ble-split` perf tests can be added; that
-work is tracked upstream in `zmk-west-commands`.
+`ble` reaches the DUT through the `renode-ble-host` app's **RPC bridge**: the
+host app relays framed Studio request bytes from the Python test to the DUT's
+RPC characteristic and streams the response indications back, so the same
+`PerfRpcDriver` drives every transport. It is far slower than `usb` /
+`wired-split` — the emulated radio needs a 10 µs global time quantum for the
+whole exchange, and coarsening it after pairing breaks the RPC path — so it
+asserts a shorter stream rather than a sustained one.
+
+### Which split mode tests what
+
+Two modes cover the perf relay over BLE, and the difference is only *how the
+request reaches the central*:
+
+- **`--host-link usb --split-link ble`** (in CI) — Studio rides the USB CDC, so
+  the radio carries **only** the split link: two machines, one LE-SC pairing.
+  This is the one to use when the **split relay** is what you are testing.
+- **`--mode ble-split`** (not in CI) — Studio *and* the split link both on the
+  radio, plus the `renode-ble-host` app: three machines, two racing pairings.
+  Use it only when Studio-over-BLE-via-a-split-central is itself the point.
+
+`ble-split` is implemented and gets as far as the relayed stream — both
+encrypted links come up, the bridge drives RPCs into the central, and the
+non-split sanity pass passes — but across ~13 whole-emulation attempts the
+emulation always died first, usually taking ZMK's link layer with it:
+
+```
+ASSERTION FAIL [next] @ zephyr/subsys/bluetooth/controller/ll_sw/nordic/lll/lll.c:891
+>>> ZEPHYR FATAL ERROR 3: Kernel oops on CPU 0 ... Halting system
+```
+
+That is the emulated radio, not this module — `zmk-west-commands` reached the
+same conclusion for its own `ble-split` smoke. Since `usb` × `ble` split covers
+the same relay code path and passes on the first attempt, `ble-split` gets no CI
+job. Both tests fail fast on a crashed machine, so a bad roll costs seconds
+rather than a full pairing budget.
 
 Run it locally (Renode auto-installs on first use):
 
 ```bash
-# usb mode
-west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af perf-usb -d build
+# usb mode (-af is a regex; anchor it so `perf-ble` does not also match
+# `perf-ble-split-central`)
+west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af '^perf-usb$' -d build
 west zmk-renode-test tests/renode --mode usb --elf build/perf-usb/zephyr/zmk.elf
 
 # wired-split mode (central relays perf requests to the peripheral)
-west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af perf-wired -d build
+west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af '^perf-wired-' -d build
 west zmk-renode-test tests/renode --mode wired-split \
     --elf build/perf-wired-central/zephyr/zmk.elf \
     --peripheral-elf build/perf-wired-peripheral/zephyr/zmk.elf
+
+# BLE modes additionally need the renode-ble-host app (the simulated computer)
+west build -b nrf52840dk/nrf52840 -d build/ble-host \
+    -s dependencies/zmk-west-commands/renode-ble-host \
+    -- -DCONFIG_RENODE_BLE_HOST_TARGET_NAME='"Renode"'
+
+# ble mode (perf over the emulated BLE Studio transport)
+west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af '^perf-ble$' -d build
+west zmk-renode-test tests/renode --mode ble --elf build/perf-ble/zephyr/zmk.elf \
+    --host-elf build/ble-host/zephyr/zephyr.elf
+
+# usb x ble split (perf relayed over the BLE split link, driven over USB CDC)
+west zmk-build tests/zmk-config --build-yaml tests/zmk-config/build-renode.yaml -af '^perf-ble-split-' -d build
+west zmk-renode-test tests/renode --host-link usb --split-link ble \
+    --elf build/perf-ble-split-central/zephyr/zmk.elf \
+    --peripheral-elf build/perf-ble-split-peripheral/zephyr/zmk.elf
+
+# ble-split (the same relay, but Studio also over BLE -- see the note above)
+west zmk-renode-test tests/renode --mode ble-split \
+    --elf build/perf-ble-split-central/zephyr/zmk.elf \
+    --peripheral-elf build/perf-ble-split-peripheral/zephyr/zmk.elf \
+    --host-elf build/ble-host/zephyr/zephyr.elf
 ```
+
+The `perf-ble-split-*` images serve both modes unchanged: the central is built
+with the `studio-rpc-usb-uart` snippet (so it can answer Studio over USB) *and*
+as a BLE split central, and which transport actually carries Studio is decided
+at runtime by whichever host talks first.
 
 **Web UI test**
 
